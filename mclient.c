@@ -59,28 +59,6 @@ int copy_ximage_to_buffer(MBuffer *buf, XImage *ximg) {
 int Xrender(Display *dpy, MBuffer *buf, XImage *ximg) {
     /* grab the current root window framebuffer */
     //printf("[DEBUG] grabbing root window...\n");
-    // ximg = XGetImage(dpy,
-    //                   DefaultRootWindow(dpy),
-    //                   0, 0,
-    //                   XDisplayWidth(dpy, 0),
-    //                   XDisplayHeight(dpy, 0),
-    //                   AllPlanes,
-    //                   ZPixmap);
-
-    // int screen = DefaultScreen(dpy);
-    // XGetSubImage(dpy,
-    //         DefaultRootWindow(dpy),
-    //         0, 0,
-    //         XDisplayWidth(dpy, screen),
-    //         XDisplayHeight(dpy, screen),
-    //         AllPlanes,
-    //         ZPixmap,
-    //         ximg,
-    //         0, 0);
-
-    // printf("[DEBUG] XGetSubImage ximg->depth = %d\n", ximg->depth);
-    // printf("[DEBUG] XGetSubImage ximg->bpp = %d\n", ximg->bits_per_pixel);
-
     Status status;
     status = XShmGetImage(dpy,
                 DefaultRootWindow(dpy),
@@ -92,10 +70,6 @@ int Xrender(Display *dpy, MBuffer *buf, XImage *ximg) {
     }
 
     copy_ximage_to_buffer(buf, ximg);
-
-    //printf("[DEBUG] destroying XImage...\n");
-    // XDestroyImage(ximg);
-
 
     XFixesCursorImage *cursor = XFixesGetCursorImage(dpy);
     //printf("[DEBUG] cursor pos: (%d, %d)\n", cursor->x, cursor->y);
@@ -206,34 +180,11 @@ int main(void) {
         return -1;
     }
 
-    int screen = DefaultScreen(dpy);
-    // int w = XDisplayWidth(dpy, screen);
-    // int h = XDisplayHeight(dpy, screen);
-    // char data[w * h * 4];
-    // printf("Default depth: %d\n", DefaultDepth(dpy, screen));
-    // XImage *ximg = XCreateImage(dpy,
-    //                 DefaultVisual(dpy, screen),
-    //                 32,
-    //                 ZPixmap,
-    //                 0,
-    //                 data,
-    //                 XDisplayWidth(dpy, screen),
-    //                 XDisplayHeight(dpy, screen),
-    //                 32,
-    //                 0);
-
-    // XImage *ximg = XGetImage(dpy,
-    //                   DefaultRootWindow(dpy),
-    //                   0, 0,
-    //                   XDisplayWidth(dpy, screen),
-    //                   XDisplayHeight(dpy, screen),
-    //                   AllPlanes,
-    //                   ZPixmap);
-
     //
     // create shared memory XImage structure
     //
     XShmSegmentInfo shminfo;
+    int screen = DefaultScreen(dpy);
     XImage *ximg = XShmCreateImage(dpy,
                         DefaultVisual(dpy, screen),
                         DefaultDepth(dpy, screen),
