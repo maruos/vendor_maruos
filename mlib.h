@@ -3,7 +3,6 @@
 
 struct MDisplay {
     int sock_fd;        /* server socket */
-    int buf_fd;         /* buffer handle */
 };
 typedef struct MDisplay MDisplay;
 
@@ -25,7 +24,8 @@ int     MCloseDisplay   (MDisplay *dpy);
 // Buffer management
 //
 int     MCreateBuffer   (MDisplay *dpy, MBuffer *buf);
-int     MUpdateBuffer   (MDisplay *dpy, MBuffer *buf);
+int     MUpdateBuffer   (MDisplay *dpy, MBuffer *buf,
+                         uint32_t xpos, uint32_t ypos);
 
 //
 // Buffer rendering

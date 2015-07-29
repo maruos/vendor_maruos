@@ -32,7 +32,8 @@ static void fillBufferRGBA8888(uint8_t *buf,
     }
 }
 
-static void bounce(uint8_t *buf, int l, int t, int w, int h, int stride) {
+static void bounce(MDisplay *dpy, MBuffer *buf,
+        int l, int t, int w, int h) {
     static int32_t xpos;
     static int32_t ypos;
     static int32_t dx;
@@ -54,7 +55,11 @@ static void bounce(uint8_t *buf, int l, int t, int w, int h, int stride) {
     // printf("[DEBUG] dx = %d\n", dx);
     // printf("[DEBUG] dy = %d\n", dy);
 
-    fillBufferRGBA8888(buf, xpos, ypos, 16, 16, stride, 0, 255, 0);
+    // fillBufferRGBA8888(buf, xpos, ypos, 16, 16, stride, 0, 255, 0);
+
+    if (MUpdateBuffer(dpy, buf, xpos, ypos) < 0) {
+        printf("[bounce] Error calling MUpdateBuffer\n");
+    }
 }
 
 int run(MDisplay *dpy, MBuffer *buf, 
@@ -104,6 +109,13 @@ static void pulseBufferTest(MDisplay *dpy, MBuffer *buf, int reps) {
     }
 }
 
+static void spriteTest(MDisplay *dpy, MBuffer *buf, int steps) {
+    int i;
+    for (i = 0; i < steps; ++i) {
+        bounce(dpy, buf, 10, 10, 1070, 1910);
+    }
+}
+
 int main(void) {
     int t, i, err;
     char buf[BUF_SIZE];
@@ -125,15 +137,26 @@ int main(void) {
     printf("[DEBUG] root.__id = %d\n", root.__id);
 
     MBuffer pointer;
-    pointer.width = 111;
-    pointer.height = 222;
+    pointer.width = 24;
+    pointer.height = 24;
     if (MCreateBuffer(&mdpy, &pointer) < 0) {
         printf("Error calling MCreateBuffer\n");
         goto out;
     }
     printf("[DEBUG] pointer.__id = %d\n", pointer.__id);
 
+
+    // paint pointer green
+    run(&mdpy, &pointer, 0, 255, 0);
+    spriteTest(&mdpy, &pointer, 500);
+
     pulseBufferTest(&mdpy, &root, 1);
+    pulseBufferTest(&mdpy, &pointer, 1);
+
+    if (MUpdateBuffer(&mdpy, &pointer, 500, 500) < 0) {
+        printf("Error calling MUpdateBuffer\n");
+    }
+
     pulseBufferTest(&mdpy, &pointer, 1);
 
     while(printf("> "), fgets(buf, BUF_SIZE, stdin), !feof(stdin)) {

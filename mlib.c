@@ -150,6 +150,28 @@ int MCreateBuffer(MDisplay *dpy, MBuffer *buf) {
     return response.result ? -1 : 0;
 }
 
+int MUpdateBuffer(MDisplay *dpy, MBuffer *buf,
+     uint32_t xpos, uint32_t ypos) {
+    struct {
+        MRequestHeader header;
+        MUpdateBufferRequest request;
+    } packet;
+    packet.header.op = M_UPDATE_BUFFER;
+    packet.request.id = buf->__id;
+    packet.request.xpos = xpos;
+    packet.request.ypos = ypos;
+
+    if (write(dpy->sock_fd, &packet, sizeof(packet)) < 0) {
+        fprintf(stderr, "error sending update buffer request: %s\n",
+            strerror(errno));
+        return -1;
+    }
+
+    /* TODO response? */
+
+    return 0;
+}
+
 int MLockBuffer(MDisplay *dpy, MBuffer *buf) {
     int buf_fd;
     struct {

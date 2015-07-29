@@ -10,8 +10,9 @@
 // Opcodes
 //
 #define M_CREATE_BUFFER             (1 << 5)
-#define M_LOCK_BUFFER               (1 << 6)
-#define M_UNLOCK_AND_POST_BUFFER    (1 << 7)
+#define M_UPDATE_BUFFER             (1 << 6)
+#define M_LOCK_BUFFER               (1 << 7)
+#define M_UNLOCK_AND_POST_BUFFER    (1 << 8)
 
 struct MRequestHeader {
     /* 
@@ -36,10 +37,21 @@ typedef struct MCreateBufferRequest MCreateBufferRequest;
 
 struct MCreateBufferResponse {
     int32_t id;        /* identifier for the created buffer */
-    //--- packed to avoid padding ---//
-    int32_t result;        /* 0 = success, -1 = failure */
+    int32_t result;    /* 0 = success, -1 = failure */
 };
 typedef struct MCreateBufferResponse MCreateBufferResponse;
+
+struct MUpdateBufferRequest {
+    int32_t id;
+    uint32_t xpos;
+    uint32_t ypos;
+};
+typedef struct MUpdateBufferRequest MUpdateBufferRequest;
+
+struct MUpdateBufferResponse {
+    int32_t result;
+};
+typedef struct MUpdateBufferResponse MUpdateBufferResponse;
 
 struct MLockBufferRequest {
     int32_t id;

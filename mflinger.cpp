@@ -155,6 +155,38 @@ static int createBuffer(const int sockfd, sp<SurfaceComposerClient>& compositor,
     return 0;
 }
 
+static int updateBuffer(const int sockfd,
+        const sp<SurfaceControl> *surfaces,
+        const int num_surfaces) {
+    int n;
+    MUpdateBufferRequest request;
+    n = read(sockfd, &request, sizeof(request));
+    ALOGD_IF(DEBUG, "[updateBuffer] n: %d", n);
+    ALOGD_IF(DEBUG, "[updateBuffer] requested id = %d", request.id);
+    ALOGD_IF(DEBUG, "[updateBuffer] requested pos = (%d, %d)",
+        request.xpos, request.ypos);
+
+    int32_t idx = buffer_id_to_index(request.id);
+
+    if (0 <= idx && idx < num_surfaces) {
+        sp<SurfaceControl> sc = surfaces[idx];
+
+        status_t ret = NO_ERROR;
+        SurfaceComposerClient::openGlobalTransaction();
+        ret |= sc->setPosition(request.xpos, request.ypos);
+        SurfaceComposerClient::closeGlobalTransaction(true);
+
+        if (NO_ERROR != ret) {
+            ALOGE("compositor transaction failed!");
+            return -1;
+        }
+
+        return 0;
+    }
+
+    return -1;
+}
+
 static int sendfd(const int sockfd, void *data, const int data_len, const int fd) {
     struct msghdr msg = {0}; // 0 initializer
     struct cmsghdr *cmsg;
@@ -358,6 +390,11 @@ int main() {
             case M_CREATE_BUFFER:
                 ALOGD_IF(DEBUG, "Create buffer request!");
                 createBuffer(cfd, compositor, surfaces, &num_surfaces);
+                break;
+
+            case M_UPDATE_BUFFER:
+                ALOGD_IF(DEBUG, "Update buffer request!");
+                updateBuffer(cfd, surfaces, num_surfaces);
                 break;
 
             case M_LOCK_BUFFER:
