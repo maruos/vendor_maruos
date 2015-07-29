@@ -21,9 +21,11 @@
 #include <utils/Errors.h>
 
 #include "mlib.h"
+#include "mlib-protocol.h"
 
-#define DEBUG 0
+#define DEBUG 1
 #define BUF_SIZE (1 << 8)
+#define MAX_SURFACES 2
 
 using namespace android;
 
@@ -83,6 +85,76 @@ static void rainbowSurfaceRGBA8888(const sp<SurfaceControl>& sc) {
     }
 }
 
+static int32_t buffer_id_to_index(int32_t id) {
+    return id - 1;
+}
+
+static int createSurface(const sp<SurfaceComposerClient>& compositor,
+                sp<SurfaceControl> *surfaces, int *num_surfaces,
+                uint32_t w, uint32_t h) {
+
+    if (*num_surfaces >= MAX_SURFACES) {
+        return -1;
+    }
+
+    String8 name = String8::format("maru %d", *num_surfaces);
+    sp<SurfaceControl> surface = compositor->createSurface(
+                                name,
+                                w, h,
+                                PIXEL_FORMAT_BGRA_8888,
+                                0);
+    if (surface == NULL || !surface->isValid()) {
+        ALOGE("compositor->createSurface() failed!");
+        return -1;
+    }
+
+    //
+    // Display the surface on the screen
+    //
+    status_t ret = NO_ERROR;
+    SurfaceComposerClient::openGlobalTransaction();
+    ret |= surface->setLayer(0x7ffffff0 + *num_surfaces);
+    ret |= surface->show();
+    SurfaceComposerClient::closeGlobalTransaction(true);
+
+    if (NO_ERROR != ret) {
+        ALOGE("compositor transaction failed!");
+        return -1;
+    }
+
+    surfaces[(*num_surfaces)++] = surface;
+
+    return 0;
+}
+
+static int createBuffer(const int sockfd, sp<SurfaceComposerClient>& compositor,
+                sp<SurfaceControl> *surfaces, int *num_surfaces) {
+    int n;
+    MCreateBufferRequest request;
+    n = read(sockfd, &request, sizeof(request));
+    ALOGD_IF(DEBUG, "[C] n: %d", n);
+    ALOGD_IF(DEBUG, "[C] requested dims = (%lux%lu)", 
+        (unsigned long)request.width, (unsigned long)request.height);
+
+    ALOGD_IF(DEBUG, "[C] 1 -- num_surfaces = %d", *num_surfaces);
+
+    n = createSurface(compositor, surfaces, num_surfaces,
+         request.width, request.height);
+
+    ALOGD_IF(DEBUG, "[C] 2 -- num_surfaces = %d", *num_surfaces);
+
+    MCreateBufferResponse response;
+    response.id = n ? -1 : *num_surfaces;
+    response.result = n ? -1 : 0;
+
+    if (write(sockfd, &response, sizeof(response)) < 0) {
+        ALOGE("[C] Failed to write response: %s", strerror(errno));
+        return -1;
+    }
+
+    return 0;
+}
+
 static int sendfd(const int sockfd, void *data, const int data_len, const int fd) {
     struct msghdr msg = {0}; // 0 initializer
     struct cmsghdr *cmsg;
@@ -124,35 +196,71 @@ static int sendfd(const int sockfd, void *data, const int data_len, const int fd
     return 0;
 }
 
-static int lockBuffer(const sp<SurfaceControl>& sc, const int sockfd) {
-    sp<Surface> s = sc->getSurface();
+static int lockBuffer(const int sockfd, const sp<SurfaceControl> *surfaces, 
+        const int num_surfaces) {
+    int n;
+    MLockBufferRequest request;
+    n = read(sockfd, &request, sizeof(request));
+    ALOGD_IF(DEBUG, "[L] n: %d", n);
+    ALOGD_IF(DEBUG, "[L] requested id = %d", request.id);
+    int32_t idx = buffer_id_to_index(request.id);
 
-    ANativeWindow_Buffer outBuffer;
-    buffer_handle_t handle;
-    status_t err = s->lockWithHandle(&outBuffer, &handle, NULL);
-    if (err != 0) {
-        ALOGE("failed to lock buffer");
-        return -1;
+    MLockBufferResponse response;
+    response.result = -1;
+
+    if (0 <= idx && idx < num_surfaces) {
+        sp<SurfaceControl> sc = surfaces[idx];
+        sp<Surface> s = sc->getSurface();
+
+        ANativeWindow_Buffer outBuffer;
+        buffer_handle_t handle;
+        status_t err = s->lockWithHandle(&outBuffer, &handle, NULL);
+        if (err != 0) {
+            ALOGE("failed to lock buffer");
+        } else if (handle->numFds < 1) {
+            ALOGE("buffer handle does not have any fds");
+        } else {
+            /* all is well */
+            response.buffer.width = outBuffer.width;
+            response.buffer.height = outBuffer.height;
+            response.buffer.stride = outBuffer.stride;
+            response.buffer.bits = NULL;
+            response.result = 0;
+
+            return sendfd(sockfd, (void *)&response,
+                sizeof(response), handle->data[0]);
+        }
+    } else {
+        ALOGE("Invalid buffer id: %d\n", request.id);
+    }    
+
+    if (write(sockfd, &response, sizeof(response)) < 0) {
+        ALOGE("[L] Failed to write response: %s", strerror(errno));
     }
-
-    if (handle->numFds < 1) {
-        ALOGE("buffer handle does not have any fds");
-        return -1;
-    }
-
-    struct MBuffer mbuf;
-    mbuf.width = outBuffer.width;
-    mbuf.height = outBuffer.height;
-    mbuf.stride = outBuffer.stride;
-    mbuf.bits = NULL;
-
-    return sendfd(sockfd, (void *)&mbuf, sizeof(mbuf), handle->data[0]);
+    return -1;
 }
 
-static int unlockAndPostBuffer(const sp<SurfaceControl>& sc) {
-    sp<Surface> s = sc->getSurface();
+static int unlockAndPostBuffer(const int sockfd, const sp<SurfaceControl> *surfaces, 
+        const int num_surfaces) {
+    int n;
+    MUnlockBufferRequest request;
+    n = read(sockfd, &request, sizeof(request));
+    ALOGD_IF(DEBUG, "[U] n: %d", n);
+    ALOGD_IF(DEBUG, "[U] requested id = %d", request.id);
+    int32_t idx = buffer_id_to_index(request.id);
 
-    return s->unlockAndPost();
+    if (0 <= idx && idx < num_surfaces) {
+        sp<SurfaceControl> sc = surfaces[idx];
+        sp<Surface> s = sc->getSurface();
+
+        return s->unlockAndPost();
+    } else {
+        ALOGE("Invalid buffer id: %d\n", request.id);
+    }
+
+    /* TODO return failure to client? */
+
+    return -1;
 }
 
 int main() {
@@ -185,29 +293,6 @@ int main() {
     uint32_t w = 1920;//dinfo.w;
     uint32_t h = 1080;//dinfo.h;
 
-    sp<SurfaceControl> surfaceControl = compositor->createSurface(
-                                            String8("Maru Surface"),
-                                            w, h,
-                                            PIXEL_FORMAT_BGRA_8888,
-                                            0);
-    if (surfaceControl == NULL || !surfaceControl->isValid()) {
-        ALOGE("compositor->createSurface() failed!");
-        return -1;
-    }
-
-    //
-    // Display the surface on the screen
-    //
-    status_t ret = NO_ERROR;
-    SurfaceComposerClient::openGlobalTransaction();
-    ret |= surfaceControl->setLayer(0x7fffffff);
-    ret |= surfaceControl->show();
-    SurfaceComposerClient::closeGlobalTransaction(true);
-
-    if (NO_ERROR != ret) {
-        ALOGE("compositor transaction failed!");
-    }
-    
     //
     // Connect to bridge socket
     //
@@ -249,10 +334,13 @@ int main() {
         ALOGE("Failed to accept client: %s", strerror(errno));
     }
 
+    int num_surfaces = 0;
+    sp<SurfaceControl> surfaces[2];
+
     do {
         int n;
-        char buf[1];
-        n = read(cfd, buf, 1);
+        uint32_t buf;
+        n = read(cfd, &buf, sizeof(buf));
 
         if (n < 0) {
             ALOGE("Failed to read from socket: %s", strerror(errno));
@@ -265,16 +353,21 @@ int main() {
         }
 
         ALOGD_IF(DEBUG, "n: %d", n);
-        ALOGD_IF(DEBUG, "buf[0]: %c", buf[0]);
-        switch (buf[0]) {
+        ALOGD_IF(DEBUG, "buf: %d", buf);
+        switch (buf) {
+            case M_CREATE_BUFFER:
+                ALOGD_IF(DEBUG, "Create buffer request!");
+                createBuffer(cfd, compositor, surfaces, &num_surfaces);
+                break;
+
             case M_LOCK_BUFFER:
                 ALOGD_IF(DEBUG, "Lock buffer request!");
-                lockBuffer(surfaceControl, cfd);
+                lockBuffer(cfd, surfaces, num_surfaces);
                 break;
 
             case M_UNLOCK_AND_POST_BUFFER:
                 ALOGD_IF(DEBUG, "Unlock and post buffer request!");
-                unlockAndPostBuffer(surfaceControl);
+                unlockAndPostBuffer(cfd, surfaces, num_surfaces);
                 break;
 
             default:
@@ -286,9 +379,9 @@ int main() {
                  * and parsing the main data buffer.
                  * Basically, don't mix calls to write() and writev().
                  */
-                if (write(cfd, ACK, strlen(ACK) + 1) < 0) {
-                    ALOGE("Failed to write socket ACK: %s", strerror(errno));
-                }
+                // if (write(cfd, ACK, strlen(ACK) + 1) < 0) {
+                //     ALOGE("Failed to write socket ACK: %s", strerror(errno));
+                // }
                 break;
         }
     } while (1);
@@ -301,7 +394,7 @@ int main() {
     // fillSurfaceRGBA8888(surfaceControl, 0, 255, 0);
 
     display = NULL;
-    surfaceControl = NULL;
+    surfaces[0] = NULL;
     compositor = NULL;
     close(sockfd);
     return 0;

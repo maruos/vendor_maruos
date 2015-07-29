@@ -10,6 +10,7 @@
 #include <sys/uio.h>
 
 #include "mlib.h"
+#include "mlib-protocol.h"
 
 //
 // Private
@@ -43,6 +44,8 @@ static int recvfd(const int sock_fd, void *data, const int data_len) {
         fprintf(stderr, "recvmsg error: %s\n", strerror(errno));
         return -1;
     }
+
+    /* TODO check n to ensure proper response!!! */
 
     if (msgh.msg_flags) {
         if (msgh.msg_flags & MSG_CTRUNC) {
@@ -118,25 +121,68 @@ int MCloseDisplay(MDisplay *dpy) {
     return 0;
 }
 
+int MCreateBuffer(MDisplay *dpy, MBuffer *buf) {
+    struct {
+        MRequestHeader header;
+        MCreateBufferRequest request;
+    } packet;
+    packet.header.op = M_CREATE_BUFFER;
+    packet.request.width = buf->width;
+    packet.request.height = buf->height;
+
+    // fprintf(stderr, "[DEBUG] packet size: %d\n", sizeof(packet));
+
+    /* send create buffer request to server */
+    if (write(dpy->sock_fd, &packet, sizeof(packet)) < 0) {
+        fprintf(stderr, "error sending create buffer request: %s\n",
+            strerror(errno));
+        return -1;
+    }
+
+    /* wait for response... */
+    MCreateBufferResponse response;
+    if (read(dpy->sock_fd, &response, sizeof(response)) < 0) {
+        fprintf(stderr, "error receiving create buffer response: %s\n", 
+            strerror(errno));
+    }
+
+    buf->__id = response.id;
+    return response.result ? -1 : 0;
+}
+
 int MLockBuffer(MDisplay *dpy, MBuffer *buf) {
     int buf_fd;
-    char op = M_LOCK_BUFFER;
+    struct {
+        MRequestHeader header;
+        MLockBufferRequest request;
+    } packet;
+    packet.header.op = M_LOCK_BUFFER;
+    packet.request.id = buf->__id;
+
+    // fprintf(stderr, "[DEBUG] packet size: %d\n", sizeof(packet));
 
     /* send lock buffer request to server */
-    if (write(dpy->sock_fd, &op, sizeof(op)) < 0) {
+    if (write(dpy->sock_fd, &packet, sizeof(packet)) < 0) {
         fprintf(stderr, "error sending lock buffer request: %s\n",
              strerror(errno));
         return -1;
     }
 
     /* receive the buffer */
-    buf_fd = recvfd(dpy->sock_fd, buf, sizeof(MBuffer));
+    MLockBufferResponse response;
+    buf_fd = recvfd(dpy->sock_fd, &response, sizeof(response));
     if (buf_fd < 0) {
         fprintf(stderr, "error receiving buffer fd: %s\n",
              strerror(errno));
         return -1;
     }
-    dpy->buf_fd = buf_fd;
+
+    if (buf->width != response.buffer.width ||
+        buf->height != response.buffer.height) {
+        fprintf(stderr, "locked buffer dim mismatch...watch out!\n");
+    }
+    buf->stride = response.buffer.stride;
+    buf->__fd = buf_fd;
 
     /*
      * mmap into client memory for software r/w
@@ -151,7 +197,8 @@ int MLockBuffer(MDisplay *dpy, MBuffer *buf) {
                  MAP_SHARED, buf_fd, offset);
     if (vaddr == MAP_FAILED) {
         fprintf(stderr, "error mmaping buffer: %s\n", strerror(errno));
-        close(dpy->buf_fd);
+        close(buf->__fd);
+        buf->__fd = -1;
         return -1;
     }
     buf->bits = vaddr;
@@ -161,10 +208,15 @@ int MLockBuffer(MDisplay *dpy, MBuffer *buf) {
 
 int MUnlockBuffer(MDisplay *dpy, MBuffer *buf) {
     int err;
-    char op = M_UNLOCK_AND_POST_BUFFER;
+    struct {
+        MRequestHeader header;
+        MUnlockBufferRequest request;
+    } packet;
+    packet.header.op = M_UNLOCK_AND_POST_BUFFER;
+    packet.request.id = buf->__id;
 
     /* send unlock buffer request to server */
-    err = write(dpy->sock_fd, &op, sizeof(op));
+    err = write(dpy->sock_fd, &packet, sizeof(packet));
     if (err < 0) {
         fprintf(stderr, "error sending unlock buffer request: %s\n",
              strerror(errno));
@@ -179,7 +231,7 @@ int MUnlockBuffer(MDisplay *dpy, MBuffer *buf) {
      * close the buffer fd or risk flooding the
      * system with new fds on each lock/unlock cycle! 
      */
-    close(dpy->buf_fd);
-    dpy->buf_fd = -1;
+    close(buf->__fd);
+    buf->__fd= -1;
     return err;
 }

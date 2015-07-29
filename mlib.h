@@ -1,17 +1,6 @@
 #ifndef MLIB_H
 #define MLIB_H
 
-//
-// Transport
-//
-#define M_SOCK_PATH "maru-bridge"
-
-//
-// Opcodes
-//
-#define M_LOCK_BUFFER 'L'
-#define M_UNLOCK_AND_POST_BUFFER 'U'
-
 struct MDisplay {
     int sock_fd;        /* server socket */
     int buf_fd;         /* buffer handle */
@@ -19,16 +8,28 @@ struct MDisplay {
 typedef struct MDisplay MDisplay;
 
 struct MBuffer {
-    int width;
-    int height;
-    int stride;         /* may be >= width */
-    void *bits;         /* raw buffer bytes in RGBA8888 format */
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride;    /* may be >= width */
+    void *bits;         /* raw buffer bytes in BGRA8888 format */
+
+    int __fd;
+    int32_t __id;
 };
 typedef struct MBuffer MBuffer;
 
 int     MOpenDisplay    (MDisplay *dpy);
 int     MCloseDisplay   (MDisplay *dpy);
 
+//
+// Buffer management
+//
+int     MCreateBuffer   (MDisplay *dpy, MBuffer *buf);
+int     MUpdateBuffer   (MDisplay *dpy, MBuffer *buf);
+
+//
+// Buffer rendering
+//
 int     MLockBuffer     (MDisplay *dpy, MBuffer *buf);
 int     MUnlockBuffer   (MDisplay *dpy, MBuffer *buf);
 

@@ -15,14 +15,13 @@
 #define BUF_SIZE (1 << 8)
 
 static void fillBufferRGBA8888(uint8_t *buf,
-         const int32_t l, const int32_t t,
-         const int32_t w, const int32_t h,
+         const uint32_t l, const uint32_t t,
+         const uint32_t w, const uint32_t h, const uint32_t stride,
          const uint8_t r, const uint8_t g, const uint8_t b) {
-    int32_t stride = 1152;
-    int32_t x, y;
+    uint32_t x, y;
     for (y = t; y < t+h; ++y) {
         for (x = l; x < l+w; ++x) {
-            int32_t pixelBase = 4 * (y * stride + x);
+            uint32_t pixelBase = 4 * (y * stride + x);
             buf[pixelBase + 0] = r;
             buf[pixelBase + 1] = g;
             buf[pixelBase + 2] = b;
@@ -33,7 +32,7 @@ static void fillBufferRGBA8888(uint8_t *buf,
     }
 }
 
-static void bounce(uint8_t *buf, int l, int t, int w, int h) {
+static void bounce(uint8_t *buf, int l, int t, int w, int h, int stride) {
     static int32_t xpos;
     static int32_t ypos;
     static int32_t dx;
@@ -55,28 +54,29 @@ static void bounce(uint8_t *buf, int l, int t, int w, int h) {
     // printf("[DEBUG] dx = %d\n", dx);
     // printf("[DEBUG] dy = %d\n", dy);
 
-    fillBufferRGBA8888(buf, xpos, ypos, 16, 16, 0, 255, 0);
+    fillBufferRGBA8888(buf, xpos, ypos, 16, 16, stride, 0, 255, 0);
 }
 
-int run(MDisplay *dpy, uint8_t r, uint8_t g, uint8_t b) {
+int run(MDisplay *dpy, MBuffer *buf, 
+        uint8_t r, uint8_t g, uint8_t b) {
     int err;
 
-    MBuffer buf;
-    err = MLockBuffer(dpy, &buf);
+    err = MLockBuffer(dpy, buf);
     if (err < 0) {
         printf("MLockBuffer failed: %s\n", strerror(errno));
         return -1;
     }
 
-    // printf("[DEBUG] buf.width = %d\n", buf.width);
-    // printf("[DEBUG] buf.height = %d\n", buf.height);
+    printf("[DEBUG] buf.width = %d\n", buf->width);
+    printf("[DEBUG] buf.height = %d\n", buf->height);
     // printf("[DEBUG] buf.stride = %d\n", buf.stride);
     // printf("[DEBUG] buf_fd = %d\n", buf_fd);
 
-    fillBufferRGBA8888((uint8_t *)buf.bits, 0, 0, buf.width, buf.height, r, g, b);
+    fillBufferRGBA8888((uint8_t *)buf->bits, 0, 0,
+         buf->width, buf->height, buf->stride, r, g, b);
     // bounce((uint8_t *)vaddr, 10, 10, 1070, 1910);
 
-    err = MUnlockBuffer(dpy, &buf);
+    err = MUnlockBuffer(dpy, buf);
     if (err < 0) {
         printf("MUnlockBuffer failed!\n");
         return -1;
@@ -91,15 +91,15 @@ int run(MDisplay *dpy, uint8_t r, uint8_t g, uint8_t b) {
  *
  * I count ~4s pulses so we are rendering 256fp4s ~= 60fps!
  */
-static void pulseBufferTest(MDisplay *dpy, int reps) {
+static void pulseBufferTest(MDisplay *dpy, MBuffer *buf, int reps) {
     int i, g;
     for (i = 0; i < reps; ++i) {
         printf("iteration %d\n", i);
         for (g = 0; g < 256; ++g) {
-            run(dpy, 0, g, 0);
+            run(dpy, buf, 0, g, 0);
         }
         for (g = 255; g >= 0; --g) {
-            run(dpy, 0, g, 0);
+            run(dpy, buf, 0, g, 0);
         }
     }
 }
@@ -115,7 +115,26 @@ int main(void) {
 
     printf("Connected.\n");
 
-    pulseBufferTest(&mdpy, 2);
+    MBuffer root;
+    root.width = 1080;
+    root.height = 1920;
+    if (MCreateBuffer(&mdpy, &root) < 0) {
+        printf("Error calling MCreateBuffer\n");
+        goto out;
+    }
+    printf("[DEBUG] root.__id = %d\n", root.__id);
+
+    MBuffer pointer;
+    pointer.width = 111;
+    pointer.height = 222;
+    if (MCreateBuffer(&mdpy, &pointer) < 0) {
+        printf("Error calling MCreateBuffer\n");
+        goto out;
+    }
+    printf("[DEBUG] pointer.__id = %d\n", pointer.__id);
+
+    pulseBufferTest(&mdpy, &root, 1);
+    pulseBufferTest(&mdpy, &pointer, 1);
 
     while(printf("> "), fgets(buf, BUF_SIZE, stdin), !feof(stdin)) {
 
@@ -159,6 +178,7 @@ int main(void) {
 
     }
 
+out:
     MCloseDisplay(&mdpy);
     return 0;
 }
