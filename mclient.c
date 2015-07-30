@@ -56,15 +56,6 @@ int copy_ximage_rows_to_buffer(MBuffer *buf, XImage *ximg,
          * so we just copy up to image width instead of bytes_per_line
          */
         memcpy(buf_row, ximg_row, ximg->width * ximg_bytes_per_pixel);
-
-        // uint32_t x;
-        // for (x = 0; x < 100 /*w*/; ++x) {
-        //    uint8_t *pixel = ximg->data +        /* base buffer ptr */
-        //        (y * ximg->bytes_per_line) +     /* scan line index within buffer */
-        //        (x * ximg_bytes_per_pixel);           /* pixel index within scan line */
-        //    printf("[DEBUG] (%d, %d) -> (%d, %d, %d, %d)\n",
-        //          x, y, pixel[0], pixel[1], pixel[2], pixel[3]);
-        // }
     }
 
     return 0;
@@ -74,7 +65,7 @@ int copy_ximage_to_buffer(MBuffer *buf, XImage *ximg) {
     return copy_ximage_rows_to_buffer(buf, ximg, 0, ximg->height);
 }
 
-int copy_xcursor_to_buffer(MBuffer *buf, XFixesCursorImage *cursor) {
+int copy_xcursor_to_buffer(MDisplay *mdpy, MBuffer *buf, XFixesCursorImage *cursor) {
     //printf("[DEBUG] painting cursor...\n");
 /*    for (y = cursor->y; y < cursor->y + cursor->height; ++y) {
         memcpy(buf + (y * 1152 * 4) + (cursor->x * 4),
@@ -82,12 +73,23 @@ int copy_xcursor_to_buffer(MBuffer *buf, XFixesCursorImage *cursor) {
          cursor->width * 4);
     }
 */
+
+    // fprintf(stderr, "[DEBUG] cursor dims = %d x %d\n",
+    //      cursor->width, cursor->height);
+
+    int err;
+    err = MLockBuffer(mdpy, buf);
+    if (err < 0) {
+        fprintf(stderr, "MLockBuffer failed!\n");
+        return -1;
+    }
+
     uint32_t cur_x, cur_y;  /* cursor relative coords */
     uint32_t x, y;          /* root window coords */
     for (cur_y = 0; cur_y < cursor->height; ++cur_y) {
         for (cur_x = 0; cur_x < cursor->width; ++cur_x) {
-            x = cursor->x + cur_x;
-            y = cursor->y + cur_y;
+            x = cur_x;
+            y = cur_y;
 
             /* bounds check! */
             if (y >= buf->height || x >= buf->width) {
@@ -108,53 +110,37 @@ int copy_xcursor_to_buffer(MBuffer *buf, XFixesCursorImage *cursor) {
         }
     }
 
+    err = MUnlockBuffer(mdpy, buf);
+    if (err < 0) {
+        fprintf(stderr, "MUnlockBuffer failed!\n");
+        return -1;
+    }
+
     return 0;
 }
 
-int Xrender(Display *dpy, MBuffer *buf, XImage *ximg, char repaint) {
+int Xrender(Display *dpy, MBuffer *buf, XImage *ximg) {
     /* grab the current root window framebuffer */
     //printf("[DEBUG] grabbing root window...\n");
-    if (repaint) {
-        Status status;
-        status = XShmGetImage(dpy,
-            DefaultRootWindow(dpy),
-            ximg,
-            0, 0,
-            AllPlanes);
-        if(!status) {
-            fprintf(stderr, "error calling XShmGetImage\n");
-        }
-
-        copy_ximage_to_buffer(buf, ximg);
+    Status status;
+    status = XShmGetImage(dpy,
+        DefaultRootWindow(dpy),
+        ximg,
+        0, 0,
+        AllPlanes);
+    if(!status) {
+        fprintf(stderr, "error calling XShmGetImage\n");
     }
 
-    XFixesCursorImage *cursor = XFixesGetCursorImage(dpy);
-    //printf("[DEBUG] cursor pos: (%d, %d)\n", cursor->x, cursor->y);
-    //printf("[DEBUG] w = %d, h = %d\n", cursor->width, cursor->height);
-    //printf("[DEBUG] xhot = %d, yhot = %d\n", cursor->xhot, cursor->yhot);
-
-    if (cursor_cache.bits == NULL) {
-        cursor_cache.bits = (uint8_t *)cursor->pixels;
-    }
-
-    copy_ximage_rows_to_buffer(buf, ximg,
-         cursor_cache.last_y, cursor_cache.last_y + cursor_cache.h);
-
-    cursor_cache.last_x = cursor->x;
-    cursor_cache.last_y = cursor->y;
-    cursor_cache.w = cursor->width;
-    cursor_cache.h = cursor->height;
-
-    copy_xcursor_to_buffer(buf, cursor);
+    copy_ximage_to_buffer(buf, ximg);
 
     return 0;
  }
 
-int run(Display *dpy, MDisplay *mdpy, XImage *ximg, char repaint) {
+int run(Display *dpy, MDisplay *mdpy, MBuffer *buf, XImage *ximg) {
     int err;
-    MBuffer buf;
 
-    err = MLockBuffer(mdpy, &buf);
+    err = MLockBuffer(mdpy, buf);
     if (err < 0) {
         fprintf(stderr, "MLockBuffer failed!\n");
         return -1;
@@ -165,13 +151,10 @@ int run(Display *dpy, MDisplay *mdpy, XImage *ximg, char repaint) {
     // printf("[DEBUG] buf.stride = %d\n", buf.stride);
     // printf("[DEBUG] buf_fd = %d\n", buf_fd);
 
-    //printf("[DEBUG] XDisplayWidth = %d\n", XDisplayWidth(dpy, 0));
-    //printf("[DEBUG] XDisplayHeight = %d\n", XDisplayHeight(dpy, 0));
-
-    Xrender(dpy, &buf, ximg, repaint);
+    Xrender(dpy, buf, ximg);
     // fillBufferRGBA8888((uint8_t *)buf.bits, 0, 0, buf.width, buf.height, r, g, b);
 
-    err = MUnlockBuffer(mdpy, &buf);
+    err = MUnlockBuffer(mdpy, buf);
     if (err < 0) {
         fprintf(stderr, "MUnlockBuffer failed!\n");
         return -1;
@@ -194,7 +177,9 @@ int main(void) {
         return -1;
     }
 
-    /* check for necessary eXtensions */
+    //
+    // check for necessary eXtensions
+    //
     int xfixes_event_base, error;
     if (!XFixesQueryExtension(dpy, &xfixes_event_base, &error)) {
         fprintf(stderr, "Xfixes extension unavailable!\n");
@@ -219,10 +204,48 @@ int main(void) {
     }
 
     //
+    // Create necessary buffers
+    //
+
+    int screen = DefaultScreen(dpy);
+
+    /* root window buffer */
+    MBuffer root;
+    root.width = XDisplayWidth(dpy, screen);
+    root.height = XDisplayHeight(dpy, screen);
+    if (MCreateBuffer(&mdpy, &root) < 0) {
+        printf("Error calling MCreateBuffer\n");
+    }
+    printf("[DEBUG] root.__id = %d\n", root.__id);
+
+    /* cursor buffer */
+    /* TODO free xcursor? */
+    XFixesCursorImage *xcursor = XFixesGetCursorImage(dpy);
+    if (cursor_cache.bits == NULL) {
+        cursor_cache.bits = (uint8_t *)xcursor->pixels;
+    }
+    cursor_cache.last_x = xcursor->x;
+    cursor_cache.last_y = xcursor->y;
+    cursor_cache.w = xcursor->width;
+    cursor_cache.h = xcursor->height;
+
+    MBuffer cursor;
+    cursor.width = xcursor->width;
+    cursor.height = xcursor->height;
+    if (MCreateBuffer(&mdpy, &cursor) < 0) {
+        printf("Error calling MCreateBuffer\n");
+    }
+    printf("[DEBUG] cursor.__id = %d\n", cursor.__id);
+
+    /* render cursor sprite */
+    if (copy_xcursor_to_buffer(&mdpy, &cursor, xcursor) < 0) {
+        fprintf(stderr, "failed to render cursor sprite\n");
+    }
+
+    //
     // create shared memory XImage structure
     //
     XShmSegmentInfo shminfo;
-    int screen = DefaultScreen(dpy);
     XImage *ximg = XShmCreateImage(dpy,
                         DefaultVisual(dpy, screen),
                         DefaultDepth(dpy, screen),
@@ -264,20 +287,6 @@ int main(void) {
         goto cleanup_X;
     }
 
-    // unsigned long background, border;
-    // background = BlackPixel(dpy, screen);
-    // border = WhitePixel(dpy, screen);
-
-    // int width = XDisplayWidth(dpy, screen);
-    // int height = XDisplayHeight(dpy, screen);
-
-    // Window win = XCreateSimpleWindow(dpy, DefaultRootWindow(dpy),
-    //                             0, 0,
-    //                             width, height,
-    //                             2, border,
-    //                             background);
-
-
     //
     // register for X events
     //
@@ -287,36 +296,45 @@ int main(void) {
 
     XDamageCreate(dpy, DefaultRootWindow(dpy), XDamageReportRawRectangles);
 
-
-    // Window root, parent;
-    // Window *children;
-    // unsigned int num_children;
-    // if (XQueryTree(dpy, DefaultRootWindow(dpy),
-    //      &root, &parent, &children, &num_children)) {
-    //     fprintf(stderr, "num_children: %d\n", num_children);
-    //     if (children != NULL) {
-    //         int i;
-    //         for (i = 0; i < num_children; ++i) {
-    //             fprintf(stderr, "[DEBUG] selecting input for child %d\n", i);
-    //             XSelectInput(dpy, children[i], PointerMotionMask);
-    //         }
-    //         XFree(children);
-    //     }
-    // } else {
-    //     fprintf(stderr, "error calling XQueryTree\n");
-    // }
-    // XGrabPointer(dpy, DefaultRootWindow(dpy), True, 
-    //     PointerMotionMask, GrabModeAsync, GrabModeAsync, None,
-    //     None, CurrentTime);
-
-    // XMapWindow(dpy, win);
-
     /* event loop */
     XEvent ev;
     Bool repaint;
     for (;;) {
+        /* TODO check that we don't queue up damage... */
         repaint = XCheckTypedEvent(dpy, xdamage_event_base + XDamageNotify, &ev);
-        run(dpy, &mdpy, ximg, repaint);
+
+        if (repaint) {
+            run(dpy, &mdpy, &root, ximg);
+        }
+
+        /* TODO switch to XQueryCursor */
+        xcursor = XFixesGetCursorImage(dpy);
+        // fprintf(stderr, "[DEBUG] cursor pos = (%d, %d)\n",
+        //      xcursor->x, xcursor->y);
+        if (xcursor->x != cursor_cache.last_x ||
+            xcursor->y != cursor_cache.last_y) {
+            /* adjust so that hotspot is top-left */
+            int32_t xpos = xcursor->x - xcursor->xhot;
+            int32_t ypos = xcursor->y - xcursor->yhot;
+
+            /* enforce lower bound or surfaceflinger freaks out */
+            if (xpos < 0) {
+                xpos = 0;
+            }
+            if (ypos < 0) {
+                ypos = 0;
+            }
+
+            if (MUpdateBuffer(&mdpy, &cursor, xpos, ypos) < 0) {
+                fprintf(stderr, "error calling MUpdateBuffer\n");
+            }
+
+            cursor_cache.last_x = xcursor->x;
+            cursor_cache.last_y = xcursor->y;
+        }
+
+        XFree(xcursor);
+
         // XNextEvent(dpy, &ev);
         // if (ev.type == xdamage_event_base + XDamageNotify) {
         //     fprintf(stderr, "XDamageNotify!\n");
