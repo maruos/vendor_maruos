@@ -174,7 +174,7 @@ static int updateBuffer(const int sockfd,
         status_t ret = NO_ERROR;
         SurfaceComposerClient::openGlobalTransaction();
         ret |= sc->setPosition(request.xpos, request.ypos);
-        SurfaceComposerClient::closeGlobalTransaction(true);
+        SurfaceComposerClient::closeGlobalTransaction();
 
         if (NO_ERROR != ret) {
             ALOGE("compositor transaction failed!");
