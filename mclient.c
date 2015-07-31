@@ -4,6 +4,9 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <pthread.h>
 
 #include <sys/ipc.h>
 #include <sys/shm.h>
@@ -14,6 +17,8 @@
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/XShm.h>
 #include <X11/extensions/Xdamage.h>
+
+#include <linux/input.h>
 
 #include "mlib.h"
 
@@ -27,6 +32,11 @@ static struct {
     uint32_t h;
     uint8_t *bits;
 } cursor_cache;
+
+static struct cursor_thread_args {
+    MDisplay *mdpy;
+    MBuffer *cursor;
+};
 
 int copy_ximage_rows_to_buffer(MBuffer *buf, XImage *ximg,
          uint32_t row_start, uint32_t row_end) {
@@ -119,25 +129,8 @@ int copy_xcursor_to_buffer(MDisplay *mdpy, MBuffer *buf, XFixesCursorImage *curs
     return 0;
 }
 
-int Xrender(Display *dpy, MBuffer *buf, XImage *ximg) {
-    /* grab the current root window framebuffer */
-    //printf("[DEBUG] grabbing root window...\n");
-    Status status;
-    status = XShmGetImage(dpy,
-        DefaultRootWindow(dpy),
-        ximg,
-        0, 0,
-        AllPlanes);
-    if(!status) {
-        fprintf(stderr, "error calling XShmGetImage\n");
-    }
-
-    copy_ximage_to_buffer(buf, ximg);
-
-    return 0;
- }
-
-int run(Display *dpy, MDisplay *mdpy, MBuffer *buf, XImage *ximg) {
+int render_root(Display *dpy, MDisplay *mdpy,
+        MBuffer *buf, XImage *ximg) {
     int err;
 
     err = MLockBuffer(mdpy, buf);
@@ -151,7 +144,18 @@ int run(Display *dpy, MDisplay *mdpy, MBuffer *buf, XImage *ximg) {
     // printf("[DEBUG] buf.stride = %d\n", buf.stride);
     // printf("[DEBUG] buf_fd = %d\n", buf_fd);
 
-    Xrender(dpy, buf, ximg);
+    Status status;
+    status = XShmGetImage(dpy,
+        DefaultRootWindow(dpy),
+        ximg,
+        0, 0,
+        AllPlanes);
+    if(!status) {
+        fprintf(stderr, "error calling XShmGetImage\n");
+    }
+
+    copy_ximage_to_buffer(buf, ximg);
+
     // fillBufferRGBA8888((uint8_t *)buf.bits, 0, 0, buf.width, buf.height, r, g, b);
 
     err = MUnlockBuffer(mdpy, buf);
@@ -163,12 +167,97 @@ int run(Display *dpy, MDisplay *mdpy, MBuffer *buf, XImage *ximg) {
     return 0;
 }
 
+int update_cursor(Display *dpy, MDisplay *mdpy, MBuffer *cursor) {
+    XFixesCursorImage *xcursor = XFixesGetCursorImage(dpy);
+    // fprintf(stderr, "[DEBUG] cursor pos = (%d, %d)\n",
+    //      xcursor->x, xcursor->y);
+    if (xcursor->x != cursor_cache.last_x ||
+        xcursor->y != cursor_cache.last_y) {
+        /* adjust so that hotspot is top-left */
+        int32_t xpos = xcursor->x - xcursor->xhot;
+        int32_t ypos = xcursor->y - xcursor->yhot;
+
+        /* enforce lower bound or surfaceflinger freaks out */
+        if (xpos < 0) {
+            xpos = 0;
+        }
+        if (ypos < 0) {
+            ypos = 0;
+        }
+
+        if (MUpdateBuffer(mdpy, cursor, xpos, ypos) < 0) {
+            fprintf(stderr, "error calling MUpdateBuffer\n");
+        }
+
+        cursor_cache.last_x = xcursor->x;
+        cursor_cache.last_y = xcursor->y;
+    }
+
+    XFree(xcursor);
+    return 0;
+}
+
+void *cursor_thread_main(void *targs) {
+    struct cursor_thread_args *args = (struct cursor_thread_args *)targs;
+
+    /* separate threads needs separate client connections */
+    Display *dpy = XOpenDisplay(NULL);
+    if (!dpy) {
+        fprintf(stderr, "[cursor_thread] error calling XOpenDisplay\n");
+        return (void *)-1;
+    }
+
+    int cursor_fd = open("/dev/input/event6", O_RDONLY);
+    if (cursor_fd < 0) {
+        fprintf(stderr, "error opening cursor evdev file: %s\n",
+            strerror(errno));
+    }
+
+    struct pollfd pollfds[1];
+    struct input_event ev;
+    int timeout = -1;
+    int err;
+    pollfds[0].fd = cursor_fd;
+    pollfds[0].events = POLLIN;
+    fprintf(stderr, "[DEBUG] polling cursor...\n");
+    do {
+        err = poll(pollfds, 1, timeout);
+
+        if (err < 0) {
+            fprintf(stderr, "[DEBUG] polling error: %s\n", strerror(errno));
+            continue;
+        }
+
+        if (pollfds[0].revents & POLLIN) {
+            // fprintf(stderr, "[DEBUG] poll: cursor is ready to read!\n");
+
+            err = read(pollfds[0].fd, &ev, sizeof(ev));
+            if (err < 0) {
+                fprintf(stderr, "error calling read: %s\n", strerror(errno));
+                break;
+            }
+            // fprintf(stderr, "[DEBUG] read %d bytes\n", err);
+            update_cursor(dpy, args->mdpy, args->cursor);
+        }
+    } while (1);
+
+    XCloseDisplay(dpy);
+    close(cursor_fd);
+    return NULL;
+}
+
 int main(void) {
     Display *dpy;
     MDisplay mdpy;
     int err = 0;
 
     /* TODO Ctrl-C handler to cleanup shm */
+
+    /* must be first Xlib call for multi-threaded programs */
+    if (!XInitThreads()) {
+        fprintf(stderr, "error calling XInitThreads\n");
+        return -1;
+    }
 
     /* connect to the X server using the DISPLAY environment variable */
     dpy = XOpenDisplay(NULL);
@@ -294,79 +383,39 @@ int main(void) {
          XFixesDisplayCursorNotifyMask);
     XSelectInput(dpy, DefaultRootWindow(dpy), PointerMotionMask);
 
-    XDamageCreate(dpy, DefaultRootWindow(dpy), XDamageReportRawRectangles);
+    /* report a single damage event if the damage region is non-empty */
+    Damage damage = XDamageCreate(dpy, DefaultRootWindow(dpy), XDamageReportNonEmpty);
 
-    /* event loop */
+
+    //
+    // cursor thread
+    //
+    pthread_t cursor_thread;
+    struct cursor_thread_args args;
+    args.mdpy = &mdpy;
+    args.cursor = &cursor;
+    pthread_create(&cursor_thread, NULL,
+        &cursor_thread_main, (void *)&args);
+
+    //
+    // event loop
+    //
     XEvent ev;
-    Bool repaint;
-    for (;;) {
-        /* TODO check that we don't queue up damage... */
-        repaint = XCheckTypedEvent(dpy, xdamage_event_base + XDamageNotify, &ev);
+    do {
+        XNextEvent(dpy, &ev);
+        if (ev.type == xdamage_event_base + XDamageNotify) {
+            XDamageNotifyEvent *dmg = (XDamageNotifyEvent *)&ev;
+            // fprintf(stderr, "[DEBUG] dmg>more = %d\n", dmg->more);
+            // fprintf(stderr, "[DEBUG] dmg->area pos (%d, %d)\n",
+            //      dmg->area.x, dmg->area.y);
+            // fprintf(stderr, "[DEBUG] dmg->area dims %dx%d\n", 
+            //      dmg->area.width, dmg->area.height);
+            render_root(dpy, &mdpy, &root, ximg);
 
-        if (repaint) {
-            run(dpy, &mdpy, &root, ximg);
+            /* clear out all the damage (so we can get another event) */
+            XDamageSubtract(dpy, dmg->damage, None, None);
         }
-
-        /* TODO switch to XQueryCursor */
-        xcursor = XFixesGetCursorImage(dpy);
-        // fprintf(stderr, "[DEBUG] cursor pos = (%d, %d)\n",
-        //      xcursor->x, xcursor->y);
-        if (xcursor->x != cursor_cache.last_x ||
-            xcursor->y != cursor_cache.last_y) {
-            /* adjust so that hotspot is top-left */
-            int32_t xpos = xcursor->x - xcursor->xhot;
-            int32_t ypos = xcursor->y - xcursor->yhot;
-
-            /* enforce lower bound or surfaceflinger freaks out */
-            if (xpos < 0) {
-                xpos = 0;
-            }
-            if (ypos < 0) {
-                ypos = 0;
-            }
-
-            if (MUpdateBuffer(&mdpy, &cursor, xpos, ypos) < 0) {
-                fprintf(stderr, "error calling MUpdateBuffer\n");
-            }
-
-            cursor_cache.last_x = xcursor->x;
-            cursor_cache.last_y = xcursor->y;
-        }
-
-        XFree(xcursor);
-
-        // XNextEvent(dpy, &ev);
-        // if (ev.type == xdamage_event_base + XDamageNotify) {
-        //     fprintf(stderr, "XDamageNotify!\n");
-        //     run(dpy, &mdpy, ximg, 1);
-        // } else if (ev.type == MotionNotify) {
-        //     fprintf(stderr, "MotionNotify!\n");
-        //     run(dpy, &mdpy, ximg);
-        // } else if (ev.type == xfixes_event_base + XFixesDisplayCursorNotify) {
-        //     fprintf(stderr, "XFixesDisplayCursorNotify!\n");
-        // }
-        // switch (ev.type) {
-        // // case XFixesDisplayCursorNotify:
-        // //     fprintf(stderr, "XFixesDisplayCursorNotify event!\n");
-        // //     // cev = (XFixesCursorNotifyEvent)ev;
-        // //     // fprintf(stderr, "cursor-serial: %d\n", cev.cursor_serial);
-        // //     break;
-
-        // case MotionNotify:
-        //     fprintf(stderr, "pointer coords = (%d, %d)\n",
-        //          ev.xmotion.x_root, ev.xmotion.y_root);
-        //     break;
-
-        // case xdamage_event_base + XDamageNotify:
-        //     fprintf(stderr, "XDamageNotify!\n");
-        //     run(dpy, &mdpy, ximg);
-        //     break;
-
-        // default:
-        //     fprintf(stderr, "received unexpected event: %d\n", ev.type);
-        //     break;
-        // }
-    }
+    } while (1);
 
 cleanup_X:
 
@@ -375,6 +424,8 @@ cleanup_X:
     }
 
     XDestroyImage(ximg);
+    XDamageDestroy(dpy, damage);
+    XCloseDisplay(dpy);
 
 cleanup_shm:
 
