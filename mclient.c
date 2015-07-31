@@ -33,12 +33,12 @@ static struct {
     uint8_t *bits;
 } cursor_cache;
 
-static struct cursor_thread_args {
+struct cursor_thread_args {
     MDisplay *mdpy;
     MBuffer *cursor;
 };
 
-int copy_ximage_rows_to_buffer(MBuffer *buf, XImage *ximg,
+int copy_ximg_rows_to_buffer_mlocked(MBuffer *buf, XImage *ximg,
          uint32_t row_start, uint32_t row_end) {
     /* sanity checks */
     // if (buf->width < ximg->width ||
@@ -59,7 +59,7 @@ int copy_ximage_rows_to_buffer(MBuffer *buf, XImage *ximg,
     uint32_t *buf_row, *ximg_row;
     for (y = row_start; y < row_end; ++y) {
         buf_row = buf->bits + (y * buf_bytes_per_line);
-        ximg_row = ximg->data + (y * ximg->bytes_per_line);
+        ximg_row = (void *)ximg->data + (y * ximg->bytes_per_line);
 
         /*
          * we don't want to copy any extra XImage row padding
@@ -71,8 +71,8 @@ int copy_ximage_rows_to_buffer(MBuffer *buf, XImage *ximg,
     return 0;
 }
 
-int copy_ximage_to_buffer(MBuffer *buf, XImage *ximg) {
-    return copy_ximage_rows_to_buffer(buf, ximg, 0, ximg->height);
+int copy_ximg_to_buffer_mlocked(MBuffer *buf, XImage *ximg) {
+    return copy_ximg_rows_to_buffer_mlocked(buf, ximg, 0, ximg->height);
 }
 
 int copy_xcursor_to_buffer(MDisplay *mdpy, MBuffer *buf, XFixesCursorImage *cursor) {
@@ -154,7 +154,7 @@ int render_root(Display *dpy, MDisplay *mdpy,
         fprintf(stderr, "error calling XShmGetImage\n");
     }
 
-    copy_ximage_to_buffer(buf, ximg);
+    copy_ximg_to_buffer_mlocked(buf, ximg);
 
     // fillBufferRGBA8888((uint8_t *)buf.bits, 0, 0, buf.width, buf.height, r, g, b);
 
@@ -207,12 +207,29 @@ void *cursor_thread_main(void *targs) {
         return (void *)-1;
     }
 
+    /* TODO handle pre-pairing */
     int cursor_fd = open("/dev/input/event6", O_RDONLY);
     if (cursor_fd < 0) {
         fprintf(stderr, "error opening cursor evdev file: %s\n",
             strerror(errno));
     }
 
+    /*
+     * Sadly, the X protocol is incapable of delivering
+     * pointer motion events for the entire root window.
+     * You can try to get around this by XSelectInput()
+     * on all windows returned by XQueryTree() but root
+     * window motion is still not included. XGrabPointer()
+     * will deliver events but blocks all other clients,
+     * i.e. none of your windows will respond to the cursor.
+     *
+     * What do we do? Either repeatedly poll (which sucks
+     * majorly for eating the CPU), or take matters into our
+     * own hands...
+     *
+     * Poll loop: we directly monitor the cursor evdev file
+     * for new events as a trigger to update the pointer.
+     */
     struct pollfd pollfds[1];
     struct input_event ev;
     int timeout = -1;
@@ -224,17 +241,18 @@ void *cursor_thread_main(void *targs) {
         err = poll(pollfds, 1, timeout);
 
         if (err < 0) {
-            fprintf(stderr, "[DEBUG] polling error: %s\n", strerror(errno));
+            fprintf(stderr, "polling error: %s\n", strerror(errno));
             continue;
         }
 
         if (pollfds[0].revents & POLLIN) {
             // fprintf(stderr, "[DEBUG] poll: cursor is ready to read!\n");
 
+            /* we must read the file to clear the event queue */
             err = read(pollfds[0].fd, &ev, sizeof(ev));
             if (err < 0) {
                 fprintf(stderr, "error calling read: %s\n", strerror(errno));
-                break;
+                continue;
             }
             // fprintf(stderr, "[DEBUG] read %d bytes\n", err);
             update_cursor(dpy, args->mdpy, args->cursor);
@@ -244,6 +262,67 @@ void *cursor_thread_main(void *targs) {
     XCloseDisplay(dpy);
     close(cursor_fd);
     return NULL;
+}
+
+int cleanup_shm(const void *shmaddr, const int shmid) {
+    if (shmdt(shmaddr) < 0) {
+        fprintf(stderr, "error detaching shm: %s\n", strerror(errno));
+        return -1;
+    }
+
+    if (shmctl(shmid, IPC_RMID, 0) < 0) {
+        fprintf(stderr, "error destroying shm: %s\n", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+XImage *init_xshm(Display *dpy, XShmSegmentInfo *shminfo, int screen) {
+    //
+    // create shared memory XImage structure
+    //
+    XImage *ximg = XShmCreateImage(dpy,
+                        DefaultVisual(dpy, screen),
+                        DefaultDepth(dpy, screen),
+                        ZPixmap,
+                        NULL,
+                        shminfo,
+                        XDisplayWidth(dpy, screen),
+                        XDisplayHeight(dpy, screen));
+    if (ximg == NULL) {
+        fprintf(stderr, "error creating XShm Ximage\n");
+        return NULL;
+    }
+
+    //
+    // create a shared memory segment to store actual image data
+    //
+    shminfo->shmid = shmget(IPC_PRIVATE,
+             ximg->bytes_per_line * ximg->height, IPC_CREAT|0777);
+    if (shminfo->shmid < 0) {
+        fprintf(stderr, "error creating shm segment: %s\n", strerror(errno));
+        return NULL;
+    }
+
+    shminfo->shmaddr = ximg->data = shmat(shminfo->shmid, NULL, 0);
+    if (shminfo->shmaddr < 0) {
+        fprintf(stderr, "error attaching shm segment: %s\n", strerror(errno));
+        cleanup_shm(shminfo->shmaddr, shminfo->shmid);
+        return NULL;
+    }
+
+    shminfo->readOnly = False;
+
+    //
+    // inform server of shm
+    //
+    if (!XShmAttach(dpy, shminfo)) {
+        fprintf(stderr, "error calling XShmAttach\n");
+        cleanup_shm(shminfo->shmaddr, shminfo->shmid);
+        return NULL;
+    }
+
+    return ximg;
 }
 
 int main(void) {
@@ -332,49 +411,10 @@ int main(void) {
     }
 
     //
-    // create shared memory XImage structure
+    // set up XShm
     //
     XShmSegmentInfo shminfo;
-    XImage *ximg = XShmCreateImage(dpy,
-                        DefaultVisual(dpy, screen),
-                        DefaultDepth(dpy, screen),
-                        ZPixmap,
-                        NULL,
-                        &shminfo,
-                        XDisplayWidth(dpy, screen),
-                        XDisplayHeight(dpy, screen));
-    if (ximg == NULL) {
-        fprintf(stderr, "error creating XShm Ximage\n");
-        return -1;
-    }
-
-    //
-    // create a shared memory segment to store actual image data
-    //
-    shminfo.shmid = shmget(IPC_PRIVATE,
-             ximg->bytes_per_line * ximg->height, IPC_CREAT|0777);
-    if (shminfo.shmid < 0) {
-        fprintf(stderr, "error creating shm segment: %s\n", strerror(errno));
-        return -1;
-    }
-
-    shminfo.shmaddr = ximg->data = shmat(shminfo.shmid, NULL, 0);
-    if (shminfo.shmaddr < 0) {
-        fprintf(stderr, "error attaching shm segment: %s\n", strerror(errno));
-        err = -1;
-        goto cleanup_shm;
-    }
-
-    shminfo.readOnly = False;
-
-    //
-    // inform server of shm
-    //
-    if (!XShmAttach(dpy, &shminfo)) {
-        fprintf(stderr, "error calling XShmAttach\n");
-        err = -1;
-        goto cleanup_X;
-    }
+    XImage *ximg = init_xshm(dpy, &shminfo, screen);
 
     //
     // register for X events
@@ -388,7 +428,7 @@ int main(void) {
 
 
     //
-    // cursor thread
+    // spawn cursor thread
     //
     pthread_t cursor_thread;
     struct cursor_thread_args args;
@@ -417,25 +457,15 @@ int main(void) {
         }
     } while (1);
 
-cleanup_X:
 
     if (!XShmDetach(dpy, &shminfo)) {
         fprintf(stderr, "error detaching shm from X server\n");
     }
+    cleanup_shm(shminfo.shmaddr, shminfo.shmid);
 
     XDestroyImage(ximg);
     XDamageDestroy(dpy, damage);
     XCloseDisplay(dpy);
-
-cleanup_shm:
-
-    if (shmdt(shminfo.shmaddr) < 0) {
-        fprintf(stderr, "error detaching shm: %s\n", strerror(errno));
-    }
-
-    if (shmctl(shminfo.shmid, IPC_RMID, 0) < 0) {
-        fprintf(stderr, "error destroying shm: %s\n", strerror(errno));
-    }
 
     return err;
 }
