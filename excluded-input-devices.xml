@@ -1,0 +1,4 @@
+<devices>
+    <!-- Disable the Android pointer -->
+    <device name="Bluetooth Mouse" />
+</devices>
