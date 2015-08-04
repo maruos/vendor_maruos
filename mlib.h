@@ -7,9 +7,9 @@ struct MDisplay {
 typedef struct MDisplay MDisplay;
 
 struct MBuffer {
-    uint32_t width;
-    uint32_t height;
-    uint32_t stride;    /* may be >= width */
+    uint32_t width;     /* width in px */
+    uint32_t height;    /* height in px */
+    uint32_t stride;    /* stride in px, may be >= width */
     void *bits;         /* raw buffer bytes in BGRA8888 format */
 
     int __fd;

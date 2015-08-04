@@ -1,6 +1,16 @@
 #ifndef MLIB_PROTOCOL_H
 #define MLIB_PROTOCOL_H
 
+/*
+ * This defines the mflinger protocol.
+ *
+ * Note that some of the requests do not have responses. This
+ * is a quick optimization so that the client does not need to
+ * wait on a response for "streaming" style calls where a few
+ * failures do not affect the end result. Cross your fingers
+ * and hope for the best style.
+ */
+
 //
 // Transport
 //
