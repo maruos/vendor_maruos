@@ -21,22 +21,9 @@
 #include <linux/input.h>
 
 #include "mlib.h"
+#include "mcursor_cache.h"
 
 #define BUF_SIZE (1 << 8)
-
-/* TODO cursor cache */
-static struct {
-    uint32_t last_x;
-    uint32_t last_y;
-    uint32_t w;
-    uint32_t h;
-    uint8_t *bits;
-} cursor_cache;
-
-struct cursor_thread_args {
-    MDisplay *mdpy;
-    MBuffer *cursor;
-};
 
 int copy_ximg_rows_to_buffer_mlocked(MBuffer *buf, XImage *ximg,
          uint32_t row_start, uint32_t row_end) {
@@ -94,6 +81,9 @@ int copy_xcursor_to_buffer(MDisplay *mdpy, MBuffer *buf, XFixesCursorImage *curs
         return -1;
     }
 
+    /* clear out stale pixels */
+    memset(buf->bits, 0, buf->height * buf->stride * 4);
+
     uint32_t cur_x, cur_y;  /* cursor relative coords */
     uint32_t x, y;          /* root window coords */
     for (cur_y = 0; cur_y < cursor->height; ++cur_y) {
@@ -106,7 +96,7 @@ int copy_xcursor_to_buffer(MDisplay *mdpy, MBuffer *buf, XFixesCursorImage *curs
                 break;
             }
 
-            uint8_t *pixel = cursor_cache.bits +
+            uint8_t *pixel = (uint8_t *)cursor->pixels +
                 4 * (cur_y * cursor->width + cur_x);
 
             // printf("[DEBUG] (%d, %d) -> (%d, %d, %d, %d)\n",
@@ -168,14 +158,27 @@ int render_root(Display *dpy, MDisplay *mdpy,
 }
 
 int update_cursor(Display *dpy, MDisplay *mdpy, MBuffer *cursor) {
-    XFixesCursorImage *xcursor = XFixesGetCursorImage(dpy);
-    // fprintf(stderr, "[DEBUG] cursor pos = (%d, %d)\n",
-    //      xcursor->x, xcursor->y);
-    if (xcursor->x != cursor_cache.last_x ||
-        xcursor->y != cursor_cache.last_y) {
+    Window root, child;
+    int root_x, root_y;
+    int win_x, win_y;
+    unsigned int mask;
+    XQueryPointer(dpy, DefaultRootWindow(dpy),
+        &root, &child,
+        &root_x, &root_y,
+        &win_x, &win_y,
+        &mask);
+
+    // fprintf(stderr, "[DEBUG] cursor coords: (%d, %d)\n",
+    //      root_x, root_y);
+
+    int last_x, last_y;
+    cursor_cache_get_last_pos(&last_x, &last_y);
+    if (root_x != last_x || root_y != last_y) {
+        XFixesCursorImage *xcursor = cursor_cache_get_cur();
+
         /* adjust so that hotspot is top-left */
-        int32_t xpos = xcursor->x - xcursor->xhot;
-        int32_t ypos = xcursor->y - xcursor->yhot;
+        int32_t xpos = root_x - xcursor->xhot;
+        int32_t ypos = root_y - xcursor->yhot;
 
         /* enforce lower bound or surfaceflinger freaks out */
         if (xpos < 0) {
@@ -189,18 +192,21 @@ int update_cursor(Display *dpy, MDisplay *mdpy, MBuffer *cursor) {
             fprintf(stderr, "error calling MUpdateBuffer\n");
         }
 
-        cursor_cache.last_x = xcursor->x;
-        cursor_cache.last_y = xcursor->y;
+        cursor_cache_set_last_pos(root_x, root_y);
     }
 
-    XFree(xcursor);
     return 0;
 }
 
-void *cursor_thread_main(void *targs) {
+struct cursor_thread_args {
+    MDisplay *mdpy;
+    MBuffer *cursor;
+};
+
+void *cursor_thread(void *targs) {
     struct cursor_thread_args *args = (struct cursor_thread_args *)targs;
 
-    /* separate threads needs separate client connections */
+    /* separate threads need separate client connections */
     Display *dpy = XOpenDisplay(NULL);
     if (!dpy) {
         fprintf(stderr, "[cursor_thread] error calling XOpenDisplay\n");
@@ -387,15 +393,9 @@ int main(void) {
     printf("[DEBUG] root.__id = %d\n", root.__id);
 
     /* cursor buffer */
-    /* TODO free xcursor? */
     XFixesCursorImage *xcursor = XFixesGetCursorImage(dpy);
-    if (cursor_cache.bits == NULL) {
-        cursor_cache.bits = (uint8_t *)xcursor->pixels;
-    }
-    cursor_cache.last_x = xcursor->x;
-    cursor_cache.last_y = xcursor->y;
-    cursor_cache.w = xcursor->width;
-    cursor_cache.h = xcursor->height;
+    cursor_cache_add(xcursor);
+    cursor_cache_set_cur(xcursor);
 
     MBuffer cursor;
     cursor.width = xcursor->width;
@@ -419,23 +419,25 @@ int main(void) {
     //
     // register for X events
     //
+
+    /* let me know when the cursor image changes */
     XFixesSelectCursorInput(dpy, DefaultRootWindow(dpy),
-         XFixesDisplayCursorNotifyMask);
-    XSelectInput(dpy, DefaultRootWindow(dpy), PointerMotionMask);
+        XFixesDisplayCursorNotifyMask);
 
     /* report a single damage event if the damage region is non-empty */
-    Damage damage = XDamageCreate(dpy, DefaultRootWindow(dpy), XDamageReportNonEmpty);
+    Damage damage = XDamageCreate(dpy, DefaultRootWindow(dpy),
+        XDamageReportNonEmpty);
 
 
     //
     // spawn cursor thread
     //
-    pthread_t cursor_thread;
+    pthread_t cursor_pthread;
     struct cursor_thread_args args;
     args.mdpy = &mdpy;
     args.cursor = &cursor;
-    pthread_create(&cursor_thread, NULL,
-        &cursor_thread_main, (void *)&args);
+    pthread_create(&cursor_pthread, NULL,
+        &cursor_thread, (void *)&args);
 
     //
     // event loop
@@ -450,10 +452,31 @@ int main(void) {
             //      dmg->area.x, dmg->area.y);
             // fprintf(stderr, "[DEBUG] dmg->area dims %dx%d\n", 
             //      dmg->area.width, dmg->area.height);
+            /* TODO opt: only render damaged areas */
             render_root(dpy, &mdpy, &root, ximg);
 
             /* clear out all the damage (so we can get another event) */
             XDamageSubtract(dpy, dmg->damage, None, None);
+        } else if (ev.type == xfixes_event_base + XFixesCursorNotify) {
+            fprintf(stderr, "[DEBUG] XFixesCursorNotifyEvent!\n");
+            XFixesCursorNotifyEvent *cev = (XFixesCursorNotifyEvent *)&ev;
+            fprintf(stderr, "[DEBUG] cursor_serial: %lu\n", cev->cursor_serial);
+
+            /* first, check if we have the new cursor in our cache... */
+            XFixesCursorImage *xcursor = cursor_cache_get(cev->cursor_serial);
+
+            /* ...if not, make the server request */
+            if (xcursor == NULL) {
+                xcursor = XFixesGetCursorImage(dpy);
+                cursor_cache_add(xcursor);
+            }
+
+            /* render the new cursor */
+            if (copy_xcursor_to_buffer(&mdpy, &cursor, xcursor) < 0) {
+                fprintf(stderr, "failed to render cursor sprite\n");
+            }
+
+            cursor_cache_set_cur(xcursor);
         }
     } while (1);
 
@@ -463,6 +486,7 @@ int main(void) {
     }
     cleanup_shm(shminfo.shmaddr, shminfo.shmid);
 
+    cursor_cache_free();
     XDestroyImage(ximg);
     XDamageDestroy(dpy, damage);
     XCloseDisplay(dpy);
