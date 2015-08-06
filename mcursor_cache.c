@@ -4,9 +4,10 @@
 #include <X11/extensions/Xfixes.h>
 
 /*
- * This cursor cache isn't for performance reasons.
- * It is required because the XFixes client extension will only
- * allocate a given cursor image ONCE the first time it is
+ * A "singleton" cache for dealing with the XFixes cursor API.
+ *
+ * This cache is required because the XFixes client extension will
+ * only allocate a given cursor image ONCE the first time it is
  * requested from the server with XFixesGetCursorImage().
  * Subsequent calls to XFixesGetCursorImage() for the same cursor
  * return a null *pixels field. Instead, each cursor is tagged with
