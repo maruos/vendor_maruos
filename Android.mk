@@ -13,7 +13,7 @@ LOCAL_SHARED_LIBRARIES := \
     liblog \
     libutils \
     libgui \
-    libmaru \
+    libmaru
 include $(BUILD_EXECUTABLE)
 
 include $(CLEAR_VARS)
