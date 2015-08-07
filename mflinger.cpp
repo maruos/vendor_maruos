@@ -23,16 +23,21 @@
 #include "mlib.h"
 #include "mlib-protocol.h"
 
-#define DEBUG 1
+#define DEBUG (1)
+
 #define BUF_SIZE (1 << 8)
-#define MAX_SURFACES 2
+#define MAX_SURFACES (2)
 
 using namespace android;
 
-static const char *ACK = "K";
+struct mflinger_state {
+    sp<SurfaceComposerClient> compositor;       /* SurfaceFlinger connection */
+    sp<SurfaceControl> surfaces[MAX_SURFACES];  /* surfaces alloc'd for clients */
+    int num_surfaces;                           /* number of surfaces currently managed */
+};
 
 static void fillSurfaceRGBA8888(const sp<SurfaceControl>& sc,
-        uint8_t r, uint8_t g, uint8_t b) {
+            uint8_t r, uint8_t g, uint8_t b) {
     sp<Surface> s = sc->getSurface();
 
     ANativeWindow_Buffer outBuffer;
@@ -89,16 +94,15 @@ static int32_t buffer_id_to_index(int32_t id) {
     return id - 1;
 }
 
-static int createSurface(const sp<SurfaceComposerClient>& compositor,
-                sp<SurfaceControl> *surfaces, int *num_surfaces,
-                uint32_t w, uint32_t h) {
+static int createSurface(struct mflinger_state *state,
+            uint32_t w, uint32_t h) {
 
-    if (*num_surfaces >= MAX_SURFACES) {
+    if (state->num_surfaces >= MAX_SURFACES) {
         return -1;
     }
 
-    String8 name = String8::format("maru %d", *num_surfaces);
-    sp<SurfaceControl> surface = compositor->createSurface(
+    String8 name = String8::format("maru %d", state->num_surfaces);
+    sp<SurfaceControl> surface = state->compositor->createSurface(
                                 name,
                                 w, h,
                                 PIXEL_FORMAT_BGRA_8888,
@@ -113,7 +117,7 @@ static int createSurface(const sp<SurfaceComposerClient>& compositor,
     //
     status_t ret = NO_ERROR;
     SurfaceComposerClient::openGlobalTransaction();
-    ret |= surface->setLayer(0x7ffffff0 + *num_surfaces);
+    ret |= surface->setLayer(0x7ffffff0 + state->num_surfaces);
     ret |= surface->show();
     SurfaceComposerClient::closeGlobalTransaction(true);
 
@@ -122,13 +126,12 @@ static int createSurface(const sp<SurfaceComposerClient>& compositor,
         return -1;
     }
 
-    surfaces[(*num_surfaces)++] = surface;
+    state->surfaces[(state->num_surfaces)++] = surface;
 
     return 0;
 }
 
-static int createBuffer(const int sockfd, sp<SurfaceComposerClient>& compositor,
-                sp<SurfaceControl> *surfaces, int *num_surfaces) {
+static int createBuffer(const int sockfd, struct mflinger_state *state) {
     int n;
     MCreateBufferRequest request;
     n = read(sockfd, &request, sizeof(request));
@@ -136,15 +139,15 @@ static int createBuffer(const int sockfd, sp<SurfaceComposerClient>& compositor,
     ALOGD_IF(DEBUG, "[C] requested dims = (%lux%lu)", 
         (unsigned long)request.width, (unsigned long)request.height);
 
-    ALOGD_IF(DEBUG, "[C] 1 -- num_surfaces = %d", *num_surfaces);
+    ALOGD_IF(DEBUG, "[C] 1 -- num_surfaces = %d", state->num_surfaces);
 
-    n = createSurface(compositor, surfaces, num_surfaces,
+    n = createSurface(state,
          request.width, request.height);
 
-    ALOGD_IF(DEBUG, "[C] 2 -- num_surfaces = %d", *num_surfaces);
+    ALOGD_IF(DEBUG, "[C] 2 -- num_surfaces = %d", state->num_surfaces);
 
     MCreateBufferResponse response;
-    response.id = n ? -1 : *num_surfaces;
+    response.id = n ? -1 : state->num_surfaces;
     response.result = n ? -1 : 0;
 
     if (write(sockfd, &response, sizeof(response)) < 0) {
@@ -155,9 +158,7 @@ static int createBuffer(const int sockfd, sp<SurfaceComposerClient>& compositor,
     return 0;
 }
 
-static int updateBuffer(const int sockfd,
-        const sp<SurfaceControl> *surfaces,
-        const int num_surfaces) {
+static int updateBuffer(const int sockfd, struct mflinger_state *state) {
     int n;
     MUpdateBufferRequest request;
     n = read(sockfd, &request, sizeof(request));
@@ -168,8 +169,8 @@ static int updateBuffer(const int sockfd,
 
     int32_t idx = buffer_id_to_index(request.id);
 
-    if (0 <= idx && idx < num_surfaces) {
-        sp<SurfaceControl> sc = surfaces[idx];
+    if (0 <= idx && idx < state->num_surfaces) {
+        sp<SurfaceControl> sc = state->surfaces[idx];
 
         status_t ret = NO_ERROR;
         SurfaceComposerClient::openGlobalTransaction();
@@ -187,7 +188,9 @@ static int updateBuffer(const int sockfd,
     return -1;
 }
 
-static int sendfd(const int sockfd, void *data, const int data_len, const int fd) {
+static int sendfd(const int sockfd,
+            void *data, const int data_len,
+            const int fd) {
     struct msghdr msg = {0}; // 0 initializer
     struct cmsghdr *cmsg;
     //int bufferFd = 1;
@@ -202,9 +205,6 @@ static int sendfd(const int sockfd, void *data, const int data_len, const int fd
      * in the same sendmsg() call to pass fds
      */
     struct iovec iov;
-    // const char *ACK = "ACK";
-    // iov.iov_base = (char *)ACK;
-    // iov.iov_len = strlen(ACK);
     iov.iov_base = data;
     iov.iov_len = data_len;
     msg.msg_iov = &iov;
@@ -228,8 +228,7 @@ static int sendfd(const int sockfd, void *data, const int data_len, const int fd
     return 0;
 }
 
-static int lockBuffer(const int sockfd, const sp<SurfaceControl> *surfaces, 
-        const int num_surfaces) {
+static int lockBuffer(const int sockfd, struct mflinger_state *state) {
     int n;
     MLockBufferRequest request;
     n = read(sockfd, &request, sizeof(request));
@@ -240,8 +239,8 @@ static int lockBuffer(const int sockfd, const sp<SurfaceControl> *surfaces,
     MLockBufferResponse response;
     response.result = -1;
 
-    if (0 <= idx && idx < num_surfaces) {
-        sp<SurfaceControl> sc = surfaces[idx];
+    if (0 <= idx && idx < state->num_surfaces) {
+        sp<SurfaceControl> sc = state->surfaces[idx];
         sp<Surface> s = sc->getSurface();
 
         ANativeWindow_Buffer outBuffer;
@@ -272,8 +271,8 @@ static int lockBuffer(const int sockfd, const sp<SurfaceControl> *surfaces,
     return -1;
 }
 
-static int unlockAndPostBuffer(const int sockfd, const sp<SurfaceControl> *surfaces, 
-        const int num_surfaces) {
+static int unlockAndPostBuffer(const int sockfd,
+            struct mflinger_state *state) {
     int n;
     MUnlockBufferRequest request;
     n = read(sockfd, &request, sizeof(request));
@@ -281,8 +280,8 @@ static int unlockAndPostBuffer(const int sockfd, const sp<SurfaceControl> *surfa
     ALOGD_IF(DEBUG, "[U] requested id = %d", request.id);
     int32_t idx = buffer_id_to_index(request.id);
 
-    if (0 <= idx && idx < num_surfaces) {
-        sp<SurfaceControl> sc = surfaces[idx];
+    if (0 <= idx && idx < state->num_surfaces) {
+        sp<SurfaceControl> sc = state->surfaces[idx];
         sp<Surface> s = sc->getSurface();
 
         return s->unlockAndPost();
@@ -295,23 +294,103 @@ static int unlockAndPostBuffer(const int sockfd, const sp<SurfaceControl> *surfa
     return -1;
 }
 
+static void purge_surfaces(struct mflinger_state *state) {
+    do {
+        /*
+         * these are strong pointers so setting them
+         * to NULL will trigger dtor()
+         */
+        state->surfaces[state->num_surfaces - 1] = NULL;
+    } while (--state->num_surfaces > 0);
+}
+
+static void serve(const int sockfd, struct mflinger_state *state) {
+    int cfd, t;
+    struct sockaddr_un remote;
+
+    ALOGD_IF(DEBUG, "Listening for client requests...");
+
+    t = sizeof(remote);
+    cfd = accept(sockfd, (struct sockaddr *)&remote, &t);
+    if (cfd < 0) {
+        ALOGE("Failed to accept client: %s", strerror(errno));
+    }
+
+    do {
+        int n;
+        uint32_t buf;
+        n = read(cfd, &buf, sizeof(buf));
+
+        if (n < 0) {
+            ALOGE("Failed to read from socket: %s", strerror(errno));
+        }
+
+        if (n == 0) {
+            ALOGE("Client closed connection.");
+            close(cfd);
+            purge_surfaces(state);
+            break;
+        }
+
+        ALOGD_IF(DEBUG, "n: %d", n);
+        ALOGD_IF(DEBUG, "buf: %d", buf);
+        switch (buf) {
+            case M_CREATE_BUFFER:
+                ALOGD_IF(DEBUG, "Create buffer request!");
+                createBuffer(cfd, state);
+                break;
+
+            case M_UPDATE_BUFFER:
+                ALOGD_IF(DEBUG, "Update buffer request!");
+                updateBuffer(cfd, state);
+                break;
+
+            case M_LOCK_BUFFER:
+                ALOGD_IF(DEBUG, "Lock buffer request!");
+                lockBuffer(cfd, state);
+                break;
+
+            case M_UNLOCK_AND_POST_BUFFER:
+                ALOGD_IF(DEBUG, "Unlock and post buffer request!");
+                unlockAndPostBuffer(cfd, state);
+                break;
+
+            default:
+                ALOGW("Unrecognized request");
+                /*
+                 * WATCH OUT! Using write() AND sendmsg() at the
+                 * same time to send a reply can result in mixed up
+                 * order on the client-side when calling recvmsg() 
+                 * and parsing the main data buffer.
+                 * Basically, don't mix calls to write() and writev().
+                 */
+                // if (write(cfd, ACK, strlen(ACK) + 1) < 0) {
+                //     ALOGE("Failed to write socket ACK: %s", strerror(errno));
+                // }
+                break;
+        }
+    } while (1);
+}
+
 int main() {
 
-    ALOGD_IF(DEBUG, "Hello, World!!");
+    struct mflinger_state state;
 
     //
     // Establish a connection with SurfaceFlinger
     //
-    sp<SurfaceComposerClient> compositor = new SurfaceComposerClient;
-    status_t check = compositor->initCheck();
+    state.compositor = new SurfaceComposerClient;
+    status_t check = state.compositor->initCheck();
     ALOGD_IF(DEBUG, "compositor->initCheck() = %d", check);
     if (NO_ERROR != check) {
         ALOGE("compositor->initCheck() failed!");
         return -1;
     }
+    state.num_surfaces = 0;
+
 
     //
-    // Create a Surface for rendering
+    // Display info
     //
     DisplayInfo dinfo;
     sp<IBinder> display = SurfaceComposerClient::getBuiltInDisplay(
@@ -335,7 +414,7 @@ int main() {
     }
 
     int len;
-    struct sockaddr_un local, remote;
+    struct sockaddr_un local;
 
     local.sun_family = AF_UNIX;
 
@@ -343,7 +422,7 @@ int main() {
     local.sun_path[0] = '\0';
     strcpy(local.sun_path + 1, M_SOCK_PATH);
     len = 1 + strlen(local.sun_path + 1) + sizeof(local.sun_family);
-    
+
     /* unlink just in case...but abstract names should be auto destroyed */
     unlink(local.sun_path);
     int err = bind(sockfd, (struct sockaddr *)&local, len);
@@ -357,71 +436,12 @@ int main() {
         ALOGE("Failed to listen on socket: %s", strerror(errno));
     }
 
-    ALOGD_IF(DEBUG, "Listening for client requests...");
-
-    int cfd, t;
-    t = sizeof(remote);
-    cfd = accept(sockfd, (struct sockaddr *)&remote, &t);
-    if (cfd < 0) {
-        ALOGE("Failed to accept client: %s", strerror(errno));
+    //
+    // Serve loop
+    //
+    for (;;) {
+        serve(sockfd, &state);
     }
-
-    int num_surfaces = 0;
-    sp<SurfaceControl> surfaces[2];
-
-    do {
-        int n;
-        uint32_t buf;
-        n = read(cfd, &buf, sizeof(buf));
-
-        if (n < 0) {
-            ALOGE("Failed to read from socket: %s", strerror(errno));
-        }
-
-        if (n == 0) {
-            ALOGE("Client closed connection.");
-            close(cfd);
-            break;
-        }
-
-        ALOGD_IF(DEBUG, "n: %d", n);
-        ALOGD_IF(DEBUG, "buf: %d", buf);
-        switch (buf) {
-            case M_CREATE_BUFFER:
-                ALOGD_IF(DEBUG, "Create buffer request!");
-                createBuffer(cfd, compositor, surfaces, &num_surfaces);
-                break;
-
-            case M_UPDATE_BUFFER:
-                ALOGD_IF(DEBUG, "Update buffer request!");
-                updateBuffer(cfd, surfaces, num_surfaces);
-                break;
-
-            case M_LOCK_BUFFER:
-                ALOGD_IF(DEBUG, "Lock buffer request!");
-                lockBuffer(cfd, surfaces, num_surfaces);
-                break;
-
-            case M_UNLOCK_AND_POST_BUFFER:
-                ALOGD_IF(DEBUG, "Unlock and post buffer request!");
-                unlockAndPostBuffer(cfd, surfaces, num_surfaces);
-                break;
-
-            default:
-                ALOGW("Unrecognized request");
-                /*
-                 * WATCH OUT! Using write() AND sendmsg() at the
-                 * same time to send a reply can result in mixed up
-                 * order on the client-side when calling recvmsg() 
-                 * and parsing the main data buffer.
-                 * Basically, don't mix calls to write() and writev().
-                 */
-                // if (write(cfd, ACK, strlen(ACK) + 1) < 0) {
-                //     ALOGE("Failed to write socket ACK: %s", strerror(errno));
-                // }
-                break;
-        }
-    } while (1);
 
 
     //
@@ -430,9 +450,15 @@ int main() {
     // rainbowSurfaceRGBA8888(surfaceControl);
     // fillSurfaceRGBA8888(surfaceControl, 0, 255, 0);
 
+
+    //
+    // Cleanup
+    //
     display = NULL;
-    surfaces[0] = NULL;
-    compositor = NULL;
+
+    purge_surfaces(&state);
+    state.compositor = NULL;
+
     close(sockfd);
     return 0;
 }
