@@ -17,6 +17,7 @@
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/XShm.h>
 #include <X11/extensions/Xdamage.h>
+#include <X11/extensions/XInput2.h>
 
 #include <linux/input.h>
 
@@ -157,17 +158,9 @@ int render_root(Display *dpy, MDisplay *mdpy,
     return 0;
 }
 
-int update_cursor(Display *dpy, MDisplay *mdpy, MBuffer *cursor) {
-    Window root, child;
-    int root_x, root_y;
-    int win_x, win_y;
-    unsigned int mask;
-    XQueryPointer(dpy, DefaultRootWindow(dpy),
-        &root, &child,
-        &root_x, &root_y,
-        &win_x, &win_y,
-        &mask);
-
+int update_cursor(Display *dpy,
+        MDisplay *mdpy, MBuffer *cursor,
+        int root_x, int root_y) {
     // fprintf(stderr, "[DEBUG] cursor coords: (%d, %d)\n",
     //      root_x, root_y);
 
@@ -209,19 +202,32 @@ void *cursor_thread(void *targs) {
     /* separate threads need separate client connections */
     Display *dpy = XOpenDisplay(NULL);
     if (!dpy) {
-        fprintf(stderr, "[cursor_thread] error calling XOpenDisplay\n");
+        fprintf(stderr, "[ct] error calling XOpenDisplay\n");
         return (void *)-1;
     }
 
-    /* TODO handle pre-pairing */
-    int cursor_fd = open("/dev/input/event6", O_RDONLY);
-    if (cursor_fd < 0) {
-        fprintf(stderr, "error opening cursor evdev file: %s\n",
-            strerror(errno));
+    /* check for XInputExtension (XI*) */
+    int xi_opcode, event, error;
+    if (!XQueryExtension(dpy, "XInputExtension",
+            &xi_opcode, &event, &error)) {
+        fprintf(stderr, "XInputExtension unavailable!\n");
+        XCloseDisplay(dpy);
+        return (void *)-1;
+    }
+
+    /* check for XI2 version */
+    int ret;
+    int major = XI_2_Major, minor = XI_2_Minor;
+    ret = XIQueryVersion(dpy, &major, &minor);
+    if (ret == BadRequest) {
+        fprintf(stderr, "No matching XI2 support. (%d.%d only)\n",
+            major, minor);
+        XCloseDisplay(dpy);
+        return (void *)-1;
     }
 
     /*
-     * Sadly, the X protocol is incapable of delivering
+     * Sadly, the core X protocol is incapable of delivering
      * pointer motion events for the entire root window.
      * You can try to get around this by XSelectInput()
      * on all windows returned by XQueryTree() but root
@@ -229,44 +235,56 @@ void *cursor_thread(void *targs) {
      * will deliver events but blocks all other clients,
      * i.e. none of your windows will respond to the cursor.
      *
-     * What do we do? Either repeatedly poll (which sucks
-     * majorly for eating the CPU), or take matters into our
-     * own hands...
+     * Fortunately, the XInputExtension CAN deliver pointer
+     * events cleanly for the whole root window! Yes!
      *
-     * Poll loop: we directly monitor the cursor evdev file
-     * for new events as a trigger to update the pointer.
+     * Previous to using XInputExtension I had to use a
+     * poll(2) loop on /dev/input/event*...nasty.
      */
-    struct pollfd pollfds[1];
-    struct input_event ev;
-    int timeout = -1;
-    int err;
-    pollfds[0].fd = cursor_fd;
-    pollfds[0].events = POLLIN;
-    fprintf(stderr, "[DEBUG] polling cursor...\n");
+
+    /* Get the main pointer device id for XI2 requests */
+    int pointer_dev_id;
+    XIGetClientPointer(dpy, None, &pointer_dev_id);
+
+    XIEventMask evmask;
+    /*
+     * The mask is set here in a very non-intuitive way
+     * but is more robust for adding additional event masks.
+     *
+     * (1) check how many bytes you need with XIMaskLen and
+     *     alloc an array of unsigned chars accordingly.
+     */
+    unsigned char mask[XIMaskLen(XI_RawMotion)] = { 0 };
+    evmask.deviceid = pointer_dev_id;
+    evmask.mask_len = sizeof(mask);
+    evmask.mask = mask;
+    /*
+     * (2) use XISetMask macro to toggle the right event bits
+     */
+    XISetMask(mask, XI_Motion);
+    XISelectEvents(dpy, DefaultRootWindow(dpy), &evmask, 1);
+
+    XEvent ev;
     do {
-        err = poll(pollfds, 1, timeout);
-
-        if (err < 0) {
-            fprintf(stderr, "polling error: %s\n", strerror(errno));
-            continue;
-        }
-
-        if (pollfds[0].revents & POLLIN) {
-            // fprintf(stderr, "[DEBUG] poll: cursor is ready to read!\n");
-
-            /* we must read the file to clear the event queue */
-            err = read(pollfds[0].fd, &ev, sizeof(ev));
-            if (err < 0) {
-                fprintf(stderr, "error calling read: %s\n", strerror(errno));
-                continue;
+        XNextEvent(dpy, &ev);
+        /* see http://who-t.blogspot.com/2009/07/xi2-and-xlib-cookies.html */
+        if (XGetEventData(dpy, &ev.xcookie)) {
+            XGenericEventCookie *cookie = &ev.xcookie;
+            if (cookie->extension == xi_opcode &&
+                cookie->evtype == XI_Motion) {
+                XIDeviceEvent *xiev = (XIDeviceEvent *)cookie->data;
+                // fprintf(stderr, "[DEBUG] cursor coords: (%d, %d)\n",
+                //      (int)xiev->root_x, (int)xiev->root_y);
+                update_cursor(dpy, args->mdpy, args->cursor,
+                    (int)xiev->root_x, (int)xiev->root_y);
             }
-            // fprintf(stderr, "[DEBUG] read %d bytes\n", err);
-            update_cursor(dpy, args->mdpy, args->cursor);
+            XFreeEventData(dpy, cookie);
+        } else {
+            fprintf(stderr, "[ct] warning: unknown event %d\n", ev.type);
         }
     } while (1);
 
     XCloseDisplay(dpy);
-    close(cursor_fd);
     return NULL;
 }
 
@@ -339,6 +357,7 @@ int main(void) {
     /* TODO Ctrl-C handler to cleanup shm */
 
     /* must be first Xlib call for multi-threaded programs */
+    /* TODO: is this needed if each thread uses it's own Display?? */
     if (!XInitThreads()) {
         fprintf(stderr, "error calling XInitThreads\n");
         return -1;
@@ -348,6 +367,7 @@ int main(void) {
     dpy = XOpenDisplay(NULL);
     if (!dpy) {
         fprintf(stderr, "error calling XOpenDisplay\n");
+        XCloseDisplay(dpy);
         return -1;
     }
 
@@ -357,23 +377,27 @@ int main(void) {
     int xfixes_event_base, error;
     if (!XFixesQueryExtension(dpy, &xfixes_event_base, &error)) {
         fprintf(stderr, "Xfixes extension unavailable!\n");
+        XCloseDisplay(dpy);
         return -1;
     }
 
     if (!XShmQueryExtension(dpy)) {
         fprintf(stderr, "XShm extension unavailable!\n");
+        XCloseDisplay(dpy);
         return -1;
     }
 
     int xdamage_event_base;
     if (!XDamageQueryExtension(dpy, &xdamage_event_base, &error)) {
         fprintf(stderr, "XDamage extension unavailable!\n");
+        XCloseDisplay(dpy);
         return -1;
     }
 
     /* connect to maru display server */
     if (MOpenDisplay(&mdpy) < 0) {
         fprintf(stderr, "error calling MOpenDisplay\n");
+        XCloseDisplay(dpy);
         return -1;
     }
 
@@ -388,7 +412,9 @@ int main(void) {
     root.width = XDisplayWidth(dpy, screen);
     root.height = XDisplayHeight(dpy, screen);
     if (MCreateBuffer(&mdpy, &root) < 0) {
-        printf("Error calling MCreateBuffer\n");
+        printf("Error creating root buffer\n");
+        err = -1;
+        goto cleanup_1;
     }
     printf("[DEBUG] root.__id = %d\n", root.__id);
 
@@ -401,8 +427,11 @@ int main(void) {
     cursor.width = xcursor->width;
     cursor.height = xcursor->height;
     if (MCreateBuffer(&mdpy, &cursor) < 0) {
-        printf("Error calling MCreateBuffer\n");
+        printf("Error creating cursor buffer\n");
+        err = -1;
+        goto cleanup_1;
     }
+    /* TODO: init cursor pos to correct location on root window? */
     printf("[DEBUG] cursor.__id = %d\n", cursor.__id);
 
     /* render cursor sprite */
@@ -481,14 +510,17 @@ int main(void) {
     } while (1);
 
 
+    XDamageDestroy(dpy, damage);
+
     if (!XShmDetach(dpy, &shminfo)) {
         fprintf(stderr, "error detaching shm from X server\n");
     }
+    XDestroyImage(ximg);
     cleanup_shm(shminfo.shmaddr, shminfo.shmid);
 
+cleanup_1:
     cursor_cache_free();
-    XDestroyImage(ximg);
-    XDamageDestroy(dpy, damage);
+    MCloseDisplay(&mdpy);
     XCloseDisplay(dpy);
 
     return err;
