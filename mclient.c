@@ -484,16 +484,21 @@ int main(void) {
         XNextEvent(dpy, &ev);
         if (ev.type == xdamage_event_base + XDamageNotify) {
             XDamageNotifyEvent *dmg = (XDamageNotifyEvent *)&ev;
+
+            /*
+             * clear out all the damage first so we
+             * don't miss a DamageNotify while rendering
+             */
+            XDamageSubtract(dpy, dmg->damage, None, None);
+
             // fprintf(stderr, "[DEBUG] dmg>more = %d\n", dmg->more);
             // fprintf(stderr, "[DEBUG] dmg->area pos (%d, %d)\n",
             //      dmg->area.x, dmg->area.y);
             // fprintf(stderr, "[DEBUG] dmg->area dims %dx%d\n", 
             //      dmg->area.width, dmg->area.height);
+
             /* TODO opt: only render damaged areas */
             render_root(dpy, &mdpy, &root, ximg);
-
-            /* clear out all the damage (so we can get another event) */
-            XDamageSubtract(dpy, dmg->damage, None, None);
         } else if (ev.type == xfixes_event_base + XFixesCursorNotify) {
             fprintf(stderr, "[DEBUG] XFixesCursorNotifyEvent!\n");
             XFixesCursorNotifyEvent *cev = (XFixesCursorNotifyEvent *)&ev;
