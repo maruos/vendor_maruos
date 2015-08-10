@@ -26,6 +26,13 @@
 
 #define BUF_SIZE (1 << 8)
 
+/*
+ * Empirically, these appear to be the max dims
+ * that X returns for cursor images.
+ */
+#define CURSOR_WIDTH  (24)
+#define CURSOR_HEIGHT (24)
+
 int copy_ximg_rows_to_buffer_mlocked(MBuffer *buf, XImage *ximg,
          uint32_t row_start, uint32_t row_end) {
     /* sanity checks */
@@ -254,7 +261,7 @@ void *cursor_thread(void *targs) {
      * (1) check how many bytes you need with XIMaskLen and
      *     alloc an array of unsigned chars accordingly.
      */
-    unsigned char mask[XIMaskLen(XI_RawMotion)] = { 0 };
+    unsigned char mask[XIMaskLen(XI_Motion)] = { 0 };
     evmask.deviceid = pointer_dev_id;
     evmask.mask_len = sizeof(mask);
     evmask.mask = mask;
@@ -367,7 +374,6 @@ int main(void) {
     dpy = XOpenDisplay(NULL);
     if (!dpy) {
         fprintf(stderr, "error calling XOpenDisplay\n");
-        XCloseDisplay(dpy);
         return -1;
     }
 
@@ -424,20 +430,22 @@ int main(void) {
     cursor_cache_set_cur(xcursor);
 
     MBuffer cursor;
-    cursor.width = xcursor->width;
-    cursor.height = xcursor->height;
+    cursor.width = CURSOR_WIDTH;
+    cursor.height = CURSOR_HEIGHT;
     if (MCreateBuffer(&mdpy, &cursor) < 0) {
         printf("Error creating cursor buffer\n");
         err = -1;
         goto cleanup_1;
     }
-    /* TODO: init cursor pos to correct location on root window? */
     printf("[DEBUG] cursor.__id = %d\n", cursor.__id);
 
     /* render cursor sprite */
     if (copy_xcursor_to_buffer(&mdpy, &cursor, xcursor) < 0) {
         fprintf(stderr, "failed to render cursor sprite\n");
     }
+
+    /* place the cursor at the right starting position */
+    update_cursor(dpy, &mdpy, &cursor, xcursor->x, xcursor->y);
 
     //
     // set up XShm
