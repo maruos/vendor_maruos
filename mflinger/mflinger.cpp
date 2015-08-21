@@ -25,73 +25,95 @@
 
 #define DEBUG (1)
 
-#define BUF_SIZE (1 << 8)
-#define MAX_SURFACES (2)
-
 using namespace android;
+
+/*
+ * There is no clean way to get the current layer stack of
+ * a display, so we have to use hardcoded Android constants here.
+ *
+ * On the Android side, DisplayManagerService is the sole entity
+ * that assigns layerstacks to displays. Current policy is that
+ * display IDs themselves are the layerstack values.
+ *
+ * To have a stable layerstack for maru, we have DMS reserve
+ * the display ID android.view.Display.MARU_DESKTOP_DISPLAY.
+ *
+ * These must match android.view.Display.DEFAULT_DISPLAY and
+ * android.view.Display.MARU_DESKTOP_DISPLAY!
+ */
+static const int DEFAULT_DISPLAY = 0;
+static const int MARU_DESKTOP_DISPLAY = 1;
+
+/*
+ * Currently we only support a single client with
+ * two surfaces that are usually:
+ *      1. root window surface
+ *      2. cursor sprite surface
+ */
+static const int MAX_SURFACES = 2;
 
 struct mflinger_state {
     sp<SurfaceComposerClient> compositor;       /* SurfaceFlinger connection */
     sp<SurfaceControl> surfaces[MAX_SURFACES];  /* surfaces alloc'd for clients */
-    int num_surfaces;                           /* number of surfaces currently managed */
+    int num_surfaces;                           /* num of surfaces currently managed */
+    int layerstack;                             /* selects display for surfaces */
 };
-
-static void fillSurfaceRGBA8888(const sp<SurfaceControl>& sc,
-            uint8_t r, uint8_t g, uint8_t b) {
-    sp<Surface> s = sc->getSurface();
-
-    ANativeWindow_Buffer outBuffer;
-    buffer_handle_t handle;
-    status_t err = s->lockWithHandle(&outBuffer, &handle, NULL);
-    ALOGE_IF(err, "failed to lock buffer");
-
-    // ALOGI("outBuffer dump");
-    // ALOGI("outBuffer size: %d x %d", outBuffer.width, outBuffer.height);
-    // ALOGI("outBuffer stride: %d", outBuffer.stride);
-
-    // ALOGI("handle dump");
-    // ALOGI("handle->version = %d", handle->version);
-    // ALOGI("handle->numFds = %d", handle->numFds);
-    // ALOGI("handle->numInts = %d", handle->numInts);
-    // ALOGI("handle->data[0] = %x", handle->data[0]);
-
-
-    uint8_t* buf = reinterpret_cast<uint8_t*>(outBuffer.bits);
-    for (int32_t y = 0; y < outBuffer.height; ++y) {
-        for (int32_t x = 0; x < outBuffer.width; ++x) {
-            int32_t pixelBase = 4 * (y * outBuffer.stride + x);
-            buf[pixelBase + 0] = r;
-            buf[pixelBase + 1] = g;
-            buf[pixelBase + 2] = b;
-            buf[pixelBase + 3] = 100; // semi-transparent
-
-            // ALOGI("(%d, %d) -> (%d, %d, %d, %d)", x, y, buf[pixelBase + 0], buf[pixelBase + 1], buf[pixelBase + 2], buf[pixelBase + 3]);
-        }
-    }
-
-    err = s->unlockAndPost();
-    ALOGE_IF(err, "failed to unlockAndPost() buffer");
-}
-
-/*
- * One can guesstimate fps based on the duration of a color
- * "pulse" created by this function as it resets the innermost
- * loop variable back to 0!
- *
- * I count ~4s pulses so we are rendering 256fp4s ~= 60fps!
- */
-static void rainbowSurfaceRGBA8888(const sp<SurfaceControl>& sc) {
-    for (int r = 0; r < 256; ++r) {
-        for (int g = 0; g < 256; ++g) {
-            for (int b = 0; b < 256; ++b) {
-                fillSurfaceRGBA8888(sc, r, g, b);
-            }
-        }
-    }
-}
 
 static int32_t buffer_id_to_index(int32_t id) {
     return id - 1;
+}
+
+static int32_t get_layer(int32_t surface_idx) {
+    /*
+     * Assign some really large number to make
+     * sure maru surfaces are the topmost layers.
+     *
+     * This is useful for debugging and showing on
+     * the default display over Android layers.
+     */
+    return 0x7ffffff0 + surface_idx;
+}
+
+static int assign_layerstack() {
+    DisplayInfo dinfo_main, dinfo_ext;
+    status_t check;
+
+    sp<IBinder> dpy_main = SurfaceComposerClient::getBuiltInDisplay(
+            ISurfaceComposer::eDisplayIdMain);
+    check = SurfaceComposerClient::getDisplayInfo(dpy_main, &dinfo_main);
+    if (NO_ERROR != check) {
+        ALOGE("getDisplayInfo() for eDisplayIdMain failed!");
+        return -1;
+    }
+
+    ALOGD_IF(DEBUG, "Main DisplayInfo dump");
+    ALOGD_IF(DEBUG, "     display w x h = %d x %d", dinfo_main.w, dinfo_main.h);
+    ALOGD_IF(DEBUG, "     display orientation = %d", dinfo_main.orientation);
+
+    /* undefined display marker */
+    dinfo_ext.w = dinfo_ext.h = 0;
+
+    sp<IBinder> dpy_ext = SurfaceComposerClient::getBuiltInDisplay(
+            ISurfaceComposer::eDisplayIdHdmi);
+    SurfaceComposerClient::getDisplayInfo(dpy_ext, &dinfo_ext);
+    if (NO_ERROR != check) {
+        ALOGW("getDisplayInfo() for eDisplayIdHdmi failed!");
+    }
+
+    ALOGD_IF(DEBUG, "HDMI DisplayInfo dump");
+    ALOGD_IF(DEBUG, "     display w x h = %d x %d", dinfo_ext.w, dinfo_ext.h);
+    ALOGD_IF(DEBUG, "     display orientation = %d", dinfo_ext.orientation);
+
+    /*
+     * If the HDMI display is valid, tell SurfaceFlinger to
+     * project our surfaces onto it by matching the surface
+     * layerstack with the HDMI display layerstack.
+     *
+     * Otherwise, we target the default built-in display for
+     * debugging purposes.
+     */
+    int hasHDMIDisplay = dinfo_ext.w > 0 && dinfo_ext.h > 0;
+    return hasHDMIDisplay ? MARU_DESKTOP_DISPLAY : DEFAULT_DISPLAY;
 }
 
 static int createSurface(struct mflinger_state *state,
@@ -99,6 +121,11 @@ static int createSurface(struct mflinger_state *state,
 
     if (state->num_surfaces >= MAX_SURFACES) {
         return -1;
+    }
+
+    /* lazy init the layerstack when the first surface is created */
+    if (state->layerstack < 0) {
+        state->layerstack = assign_layerstack();
     }
 
     String8 name = String8::format("maru %d", state->num_surfaces);
@@ -117,8 +144,11 @@ static int createSurface(struct mflinger_state *state,
     //
     status_t ret = NO_ERROR;
     SurfaceComposerClient::openGlobalTransaction();
-    ret |= surface->setLayer(0x7ffffff0 + state->num_surfaces);
+
+    ret |= surface->setLayer(get_layer(state->num_surfaces));
+    ret |= surface->setLayerStack(state->layerstack);
     ret |= surface->show();
+
     SurfaceComposerClient::closeGlobalTransaction(true);
 
     if (NO_ERROR != ret) {
@@ -327,8 +357,12 @@ static void serve(const int sockfd, struct mflinger_state *state) {
 
         if (n == 0) {
             ALOGE("Client closed connection.");
+
             close(cfd);
             purge_surfaces(state);
+
+            /* look for new displays for the next client */
+            state->layerstack = -1;
             break;
         }
 
@@ -375,6 +409,8 @@ static void serve(const int sockfd, struct mflinger_state *state) {
 int main() {
 
     struct mflinger_state state;
+    state.num_surfaces = 0;
+    state.layerstack = -1;
 
     //
     // Establish a connection with SurfaceFlinger
@@ -386,23 +422,6 @@ int main() {
         ALOGE("compositor->initCheck() failed!");
         return -1;
     }
-    state.num_surfaces = 0;
-
-
-    //
-    // Display info
-    //
-    DisplayInfo dinfo;
-    sp<IBinder> display = SurfaceComposerClient::getBuiltInDisplay(
-            ISurfaceComposer::eDisplayIdMain);
-    SurfaceComposerClient::getDisplayInfo(display, &dinfo);
-
-    ALOGI("DisplayInfo dump");
-    ALOGI("     display w x h = %d x %d", dinfo.w, dinfo.h);
-    ALOGI("     display orientation = %d", dinfo.orientation);
-
-    uint32_t w = 1920;//dinfo.w;
-    uint32_t h = 1080;//dinfo.h;
 
     //
     // Connect to bridge socket
@@ -434,28 +453,21 @@ int main() {
     err = listen(sockfd, 1);
     if (err < 0) {
         ALOGE("Failed to listen on socket: %s", strerror(errno));
+        return -1;
     }
 
     //
     // Serve loop
     //
+    ALOGI("At your service!");
     for (;;) {
         serve(sockfd, &state);
     }
 
 
     //
-    // Render test!
-    //
-    // rainbowSurfaceRGBA8888(surfaceControl);
-    // fillSurfaceRGBA8888(surfaceControl, 0, 255, 0);
-
-
-    //
     // Cleanup
     //
-    display = NULL;
-
     purge_surfaces(&state);
     state.compositor = NULL;
 
