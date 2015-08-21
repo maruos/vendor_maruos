@@ -1,0 +1,35 @@
+# Template used to create this container: /usr/share/lxc/templates/lxc-debian
+# Parameters passed to the template: -r jessie
+# For additional config options, please look at lxc.conf(5)
+
+# share the network namespace with Android
+lxc.network.type = none
+
+lxc.rootfs = /data/maru/containers/jessie/rootfs
+
+# Common configuration
+lxc.include = /data/maru/lxc/share/lxc/config/debian.common.conf
+
+# Container specific configuration
+lxc.mount = /data/maru/containers/jessie/fstab
+lxc.utsname = jessie
+lxc.arch = armhf
+
+# needed for systemd
+lxc.autodev = 1
+
+# prevent journalctl from eating CPU
+lxc.kmsg = 0
+
+# HACK to disable SELinux
+lxc.mount.entry = /sys/fs/selinux sys/fs/selinux none bind,ro
+lxc.mount.entry = /dev/input dev/input none bind,ro,create=dir
+
+# tty7 for X11
+lxc.cgroup.devices.allow = c 4:7 rwm
+# fb0
+lxc.cgroup.devices.allow = c 29:0 rwm
+# fb1
+lxc.cgroup.devices.allow = c 29:1 rwm
+
+lxc.hook.start = /etc/lxc/lxc-hook-start.sh

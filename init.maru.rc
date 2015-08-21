@@ -1,0 +1,26 @@
+#
+# Maru-specific init
+#
+
+on init
+
+    # 
+    # set up devices cgroup
+    #
+
+    # init.rc already mounts tmpfs for memory cgroup
+    mkdir /sys/fs/cgroup/devices 0750 root system
+    #chown root system /sys/fs/cgroup/devices
+    #chmod 0750 /sys/fs/cgroup/devices
+    mount cgroup none /sys/fs/cgroup/devices devices
+
+
+service mflinger /system/bin/mflinger
+    class main
+    user graphics
+    group graphics
+    oneshot
+
+service perspectived /system/bin/perspectived
+    class main
+    oneshot

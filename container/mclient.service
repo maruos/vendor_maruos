@@ -1,0 +1,10 @@
+[Unit]
+Description=mflinger client for X11
+After=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mclient-wrapper.sh
+
+[Install]
+WantedBy=multi-user.target
