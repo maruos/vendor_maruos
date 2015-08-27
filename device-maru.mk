@@ -29,3 +29,7 @@ PRODUCT_COPY_FILES += \
     device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/common.seccomp:data/maru/lxc/share/lxc/config/common.seccomp \
     device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/debian.common.conf:data/maru/lxc/share/lxc/config/debian.common.conf \
     device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/debian.userns.conf:data/maru/lxc/share/lxc/config/debian.userns.conf
+
+
+DEVICE_PACKAGE_OVERLAYS := \
+    device/lge/hammerhead/maru/overlay/location
