@@ -7,11 +7,19 @@
 #include <cutils/log.h>
 #include <hardware_legacy/uevent.h>
 
+#include "lxc/lxccontainer.h"
+
+#define CONTAINER "jessie"
+
 struct perspectived_state {
     int hdmi_switch;        /* last hdmi switch state */
-    int desktop_running;    /* is desktop container running? */ 
+    struct lxc_container *container;
 };
 static struct perspectived_state state;
+
+static int is_running(struct lxc_container *container) {
+    return container != NULL && container->is_running(container);
+}
 
 static void uevent_poll() {
     char uevent_desc[4096];
@@ -19,12 +27,8 @@ static void uevent_poll() {
     int timeout = -1;
     int err;
 
-    ALOGD("before uevent_init");
-
     /* set up the kernel uevent netlink socket */
     uevent_init();
-
-    ALOGD("after uevent_init");
 
     memset(uevent_desc, 0, sizeof(uevent_desc));
 
@@ -49,15 +53,18 @@ static void uevent_poll() {
 
                 /* TODO: parse uevent for switch state */
 
-                if (!state.desktop_running) {
-                    err = system("/system/xbin/mcontainer-start.sh -d");
-                    if (err < 0) {
-                        ALOGE("failed to start desktop");
-                        continue;
+                if (!is_running(state.container)) {
+                    if (!state.container->start(state.container, 0, NULL)) {
+                        ALOGW("liblxc returned false for start, possible false positive...");
+                        if (!is_running(state.container)) {
+                            ALOGE("failed to start desktop");
+                            continue;
+                        }
                     }
 
                     ALOGI("desktop GO!");
-                    state.desktop_running = 1;
+                } else {
+                    ALOGD("desktop already running, ignoring event...");
                 }
             }
         }
@@ -66,8 +73,13 @@ static void uevent_poll() {
 
 int main(void) {
 
-    ALOGI("starting uevent poll...");
+    state.container = lxc_container_new(CONTAINER, NULL);
+    if (state.container == NULL || !state.container->is_defined(state.container)) {
+        ALOGE("can't initialize desktop container");
+        return -1;
+    }
 
+    ALOGI("starting uevent poll...");
     uevent_poll();
    
     // never reaches here
