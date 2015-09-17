@@ -23,6 +23,9 @@ PRODUCT_COPY_FILES += \
 # LXC
 PRODUCT_COPY_FILES += \
     device/lge/hammerhead/maru/prebuilts/lxc/bin/lxc-start:system/xbin/lxc-start \
+    device/lge/hammerhead/maru/prebuilts/lxc/bin/lxc-stop:system/xbin/lxc-stop \
+    device/lge/hammerhead/maru/prebuilts/lxc/bin/lxc-info:system/xbin/lxc-info \
+    device/lge/hammerhead/maru/prebuilts/lxc/bin/lxc-console:system/xbin/lxc-console \
     device/lge/hammerhead/maru/prebuilts/lxc/lib/liblxc.so.1.0.7:system/lib/liblxc.so.1 \
     device/lge/hammerhead/maru/prebuilts/lxc/lib/lxc/rootfs/README:data/maru/lxc/lib/lxc/rootfs/README \
     device/lge/hammerhead/maru/prebuilts/lxc/libexec/lxc/lxc-monitord:data/maru/lxc/libexec/lxc/lxc-monitord \
