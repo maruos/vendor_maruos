@@ -14,6 +14,15 @@ on init
     #chmod 0750 /sys/fs/cgroup/devices
     mount cgroup none /sys/fs/cgroup/devices devices
 
+    #
+    # set up freezer cgroup
+    #
+    # Calling stop on an LXC container returns failure
+    # without this.
+    #
+    mkdir /sys/fs/cgroup/freezer 0750 root system
+    mount cgroup none /sys/fs/cgroup/freezer freezer
+
 
 service mflinger /system/bin/mflinger
     class main
