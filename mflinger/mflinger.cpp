@@ -95,7 +95,7 @@ static int assign_layerstack() {
 
     sp<IBinder> dpy_ext = SurfaceComposerClient::getBuiltInDisplay(
             ISurfaceComposer::eDisplayIdHdmi);
-    SurfaceComposerClient::getDisplayInfo(dpy_ext, &dinfo_ext);
+    check = SurfaceComposerClient::getDisplayInfo(dpy_ext, &dinfo_ext);
     if (NO_ERROR != check) {
         ALOGW("getDisplayInfo() for eDisplayIdHdmi failed!");
     }
@@ -114,6 +114,38 @@ static int assign_layerstack() {
      */
     int hasHDMIDisplay = dinfo_ext.w > 0 && dinfo_ext.h > 0;
     return hasHDMIDisplay ? MARU_DESKTOP_DISPLAY : DEFAULT_DISPLAY;
+}
+
+static int getDisplayInfo(const int sockfd) {
+    /* no request args */
+
+    DisplayInfo dinfo_ext;
+    status_t check;
+
+    /* undefined display marker */
+    dinfo_ext.w = dinfo_ext.h = 0;
+
+    sp<IBinder> dpy_ext = SurfaceComposerClient::getBuiltInDisplay(
+            ISurfaceComposer::eDisplayIdHdmi);
+    check = SurfaceComposerClient::getDisplayInfo(dpy_ext, &dinfo_ext);
+    if (NO_ERROR != check) {
+        ALOGW("getDisplayInfo() for eDisplayIdHdmi failed!");
+    }
+
+    ALOGD_IF(DEBUG, "HDMI DisplayInfo dump");
+    ALOGD_IF(DEBUG, "     display w x h = %d x %d", dinfo_ext.w, dinfo_ext.h);
+    ALOGD_IF(DEBUG, "     display orientation = %d", dinfo_ext.orientation);
+
+    MGetDisplayInfoResponse response;
+    response.width = dinfo_ext.w;
+    response.height = dinfo_ext.h;
+
+    if (write(sockfd, &response, sizeof(response)) < 0) {
+        ALOGE("[getDisplayInfo] Failed to write response: %s", strerror(errno));
+        return -1;
+    }
+
+    return 0;
 }
 
 static int createSurface(struct mflinger_state *state,
@@ -325,13 +357,20 @@ static int unlockAndPostBuffer(const int sockfd,
 }
 
 static void purge_surfaces(struct mflinger_state *state) {
-    do {
+    for (; state->num_surfaces > 0; --state->num_surfaces) {
         /*
          * these are strong pointers so setting them
          * to NULL will trigger dtor()
          */
         state->surfaces[state->num_surfaces - 1] = NULL;
-    } while (--state->num_surfaces > 0);
+    }
+}
+
+static void reset_state(struct mflinger_state *state) {
+    purge_surfaces(state);
+
+    /* look for new displays for the next client */
+    state->layerstack = -1;
 }
 
 static void serve(const int sockfd, struct mflinger_state *state) {
@@ -344,6 +383,7 @@ static void serve(const int sockfd, struct mflinger_state *state) {
     cfd = accept(sockfd, (struct sockaddr *)&remote, &t);
     if (cfd < 0) {
         ALOGE("Failed to accept client: %s", strerror(errno));
+        return;
     }
 
     do {
@@ -353,22 +393,24 @@ static void serve(const int sockfd, struct mflinger_state *state) {
 
         if (n < 0) {
             ALOGE("Failed to read from socket: %s", strerror(errno));
-        }
 
-        if (n == 0) {
+            // client hung up with unread data
+            if (errno == -ECONNRESET) {
+                break;
+            }
+        } else if (n == 0) {
             ALOGE("Client closed connection.");
-
-            close(cfd);
-            purge_surfaces(state);
-
-            /* look for new displays for the next client */
-            state->layerstack = -1;
             break;
         }
 
         ALOGD_IF(DEBUG, "n: %d", n);
         ALOGD_IF(DEBUG, "buf: %d", buf);
         switch (buf) {
+            case M_GET_DISPLAY_INFO:
+                ALOGD_IF(DEBUG, "Get display info request!");
+                getDisplayInfo(cfd);
+                break;
+
             case M_CREATE_BUFFER:
                 ALOGD_IF(DEBUG, "Create buffer request!");
                 createBuffer(cfd, state);
@@ -404,6 +446,9 @@ static void serve(const int sockfd, struct mflinger_state *state) {
                 break;
         }
     } while (1);
+
+    reset_state(state);
+    close(cfd);
 }
 
 int main() {

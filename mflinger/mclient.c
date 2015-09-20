@@ -18,6 +18,7 @@
 #include <X11/extensions/XShm.h>
 #include <X11/extensions/Xdamage.h>
 #include <X11/extensions/XInput2.h>
+#include <X11/extensions/Xrandr.h>
 
 #include <linux/input.h>
 
@@ -309,17 +310,18 @@ int cleanup_shm(const void *shmaddr, const int shmid) {
 }
 
 XImage *init_xshm(Display *dpy, XShmSegmentInfo *shminfo, int screen) {
-    //
-    // create shared memory XImage structure
-    //
+    /* create shared memory XImage structure */
+    printf("creating %dx%d XShm\n",
+        XDisplayWidth(dpy, screen),
+        XDisplayHeight(dpy, screen));
     XImage *ximg = XShmCreateImage(dpy,
-                        DefaultVisual(dpy, screen),
-                        DefaultDepth(dpy, screen),
-                        ZPixmap,
-                        NULL,
-                        shminfo,
-                        XDisplayWidth(dpy, screen),
-                        XDisplayHeight(dpy, screen));
+                    DefaultVisual(dpy, screen),
+                    DefaultDepth(dpy, screen),
+                    ZPixmap,
+                    NULL,
+                    shminfo,
+                    XDisplayWidth(dpy, screen),
+                    XDisplayHeight(dpy, screen));
     if (ximg == NULL) {
         fprintf(stderr, "error creating XShm Ximage\n");
         return NULL;
@@ -356,6 +358,196 @@ XImage *init_xshm(Display *dpy, XShmSegmentInfo *shminfo, int screen) {
     return ximg;
 }
 
+/**
+ * @return only valid as long as @param screenr is not freed
+ */
+static XRRModeInfo *x_find_matching_mode(Display *dpy,
+        const XRRScreenResources *screenr,
+        const uint32_t width, const uint32_t height)
+{
+    if (dpy == NULL || screenr == NULL) {
+        return NULL;
+    }
+
+    int i;
+    for (i = 0; i < screenr->nmode; ++i) {
+        XRRModeInfo mode = screenr->modes[i];
+        printf("found supported mode: %dx%d\n", mode.width, mode.height);
+        if (mode.width == width && mode.height == height) {
+            return &screenr->modes[i];
+        }
+    }
+
+    return NULL;
+}
+
+/**
+ * Assumes only one crtc
+ */
+static int x_set_mode(Display *dpy,
+        XRRScreenResources *screenr, const XRRModeInfo *mode)
+{
+    if (dpy == NULL || screenr == NULL || mode == NULL) {
+        return -2;
+    }
+
+    int screen = DefaultScreen(dpy);
+
+    /* keep Screen PPI constant */
+    double ppi = (25.4 * XDisplayHeight(dpy, screen)) / XDisplayHeightMM(dpy, screen);
+    // fprintf(stderr, "PPI = %f\n", ppi);
+    int mwidth = (25.4 * mode->width) / ppi;
+    int mheight = (25.4 * mode->height) / ppi;
+
+    fprintf(stderr, "info: setting screen size to %dx%d %dmmx%dmm\n",
+         mode->width, mode->height,
+         mwidth, mheight);
+
+    XRRCrtcInfo *crtc = XRRGetCrtcInfo(dpy, screenr, screenr->crtcs[0]);
+
+    if (XRRSetCrtcConfig(dpy, screenr, screenr->crtcs[0], CurrentTime,
+            0, 0, mode->id, RR_Rotate_0,
+            crtc->outputs, crtc->noutput) != RRSetConfigSuccess) {
+        fprintf(stderr, "error setting crtc config\n");
+        return -1;
+    }
+
+    XRRSetScreenSize(dpy, DefaultRootWindow(dpy),
+         mode->width, mode->height,
+         mwidth, mheight);
+
+    return 0;
+}
+
+static int x_screenchangenotify_predicate(Display *dpy, XEvent *ev, XPointer arg) {
+    int xrandr_event_base = (int)arg;
+    return ev->type == xrandr_event_base + RRScreenChangeNotify;
+}
+
+/*
+ * This must be called after x_set_mode to sync Xlib
+ * up with the new screen changes.
+ *
+ * @note You must select for RRScreenChangeNotify on the root window
+ * before calling this function.
+ */
+static int x_sync_mode(Display *dpy, XRRScreenResources *screenr,
+        const XRRModeInfo *mode, const int xrandr_event_base)
+{
+    if (dpy == NULL || screenr == NULL || mode == NULL || xrandr_event_base < 0) {
+        return -2;
+    }
+
+    XEvent ev;
+
+    /*
+     * I have experimentally observed some screen change events
+     * being delivered on startup (perhaps due to the display manager?).
+     * Try popping a few times in case we don't get our event at first.
+     */
+    int i;
+    for (i = 0; i < 3; ++i) {
+        fprintf(stderr, "waiting for ScreenChangeNotify events...\n");
+        XIfEvent(dpy, &ev, x_screenchangenotify_predicate, (void *)xrandr_event_base);
+        fprintf(stderr, "got event: %d\n", ev.type);
+        if (ev.type == xrandr_event_base + RRScreenChangeNotify) {
+            XRRScreenChangeNotifyEvent *screen_change = (XRRScreenChangeNotifyEvent *)&ev;
+            fprintf(stderr, "[t=%lu]: screen size changed to %dx%d %dmmx%dmm\n",
+                screen_change->timestamp,
+                screen_change->width, screen_change->height,
+                screen_change->mwidth, screen_change->mheight);
+
+            if (screen_change->width == mode->width &&
+                screen_change->height == mode->height) {
+                /*
+                 * Yes, this is our update! Let Xlib know that
+                 * we need to update our local screen config.
+                 */
+                if (XRRUpdateConfiguration(&ev) == 0) {
+                    fprintf(stderr, "error updating xrandr configuration\n");
+                    return -1;
+                }
+                return 0;
+            }
+        }
+    }
+
+    return -1;
+}
+
+static int sync_resolution(Display *dpy, MDisplay *mdpy, const int xrandr_event_base) {
+    if (dpy == NULL || mdpy == NULL) {
+        return -2;
+    }
+
+    MDisplayInfo dinfo = { 0 };
+    if (MGetDisplayInfo(mdpy, &dinfo) < 0) {
+        fprintf(stderr, "warning: couldn't get mdisplay info, using default mode\n");
+        return -1;
+    }
+
+    int valid_display = dinfo.width > 0 && dinfo.height > 0;
+    fprintf(stderr, "[DEBUG] mwidth = %d, mheight = %d\n", dinfo.width, dinfo.height);
+    if (!valid_display) {
+        return -1;
+    }
+
+    /*
+     * Re-sync before our service grab in case the screen
+     * config has changed since we connected to the X server.
+     *
+     * This can be a problem on XFCE when xfsettingsd sets
+     * the mode on startup based on a user's saved session.
+     */
+    XEvent ev;
+    if (XCheckIfEvent(dpy, &ev,
+            x_screenchangenotify_predicate,
+            (void *)xrandr_event_base)) {
+        if (XRRUpdateConfiguration(&ev) == 0) {
+            fprintf(stderr, "error updating xrandr configuration\n");
+        }
+    }
+
+    /*
+     * Prevent any other client from changing the screen
+     * config under our feet by "pausing" their X connections.
+     *
+     * NOTE: Any work with the screen configuration must come AFTER
+     * this grab to ensure we are not using stale information!
+     */
+    XGrabServer(dpy);
+
+    int screen = DefaultScreen(dpy);
+    int sync_needed = XDisplayWidth(dpy, screen) != dinfo.width ||
+                        XDisplayHeight(dpy, screen) != dinfo.height;
+    if (sync_needed) {
+        XRRScreenResources *screenr = XRRGetScreenResources(dpy, DefaultRootWindow(dpy));
+        XRRModeInfo *matching_mode = x_find_matching_mode(dpy, screenr,
+                                        dinfo.width, dinfo.height);
+        if (matching_mode != NULL) {
+            if (x_set_mode(dpy, screenr, matching_mode) == 0) {
+                if (x_sync_mode(dpy, screenr, matching_mode, xrandr_event_base) < 0) {
+                    fprintf(stderr, "error: failed to sync mode\n");
+                }
+            } else {
+                fprintf(stderr, "error: failed to set mode\n");
+            }
+        } else {
+            fprintf(stderr, "warning: couldn't find matching mode, using default mode\n");
+        }
+
+        XRRFreeScreenResources(screenr);
+    }
+
+    /*
+     * We are done so let other clients be informed of
+     * the screen changes and resume normal processing.
+     */
+    XUngrabServer(dpy);
+
+    return 0;
+}
+
 int main(void) {
     Display *dpy;
     MDisplay mdpy;
@@ -364,7 +556,6 @@ int main(void) {
     /* TODO Ctrl-C handler to cleanup shm */
 
     /* must be first Xlib call for multi-threaded programs */
-    /* TODO: is this needed if each thread uses it's own Display?? */
     if (!XInitThreads()) {
         fprintf(stderr, "error calling XInitThreads\n");
         return -1;
@@ -400,6 +591,13 @@ int main(void) {
         return -1;
     }
 
+    int xrandr_event_base;
+    if (!XRRQueryExtension(dpy, &xrandr_event_base, &error)) {
+        fprintf(stderr, "Xrandr extension unavailable!\n");
+        XCloseDisplay(dpy);
+        return -1;
+    }
+
     /* connect to maru display server */
     if (MOpenDisplay(&mdpy) < 0) {
         fprintf(stderr, "error calling MOpenDisplay\n");
@@ -407,14 +605,21 @@ int main(void) {
         return -1;
     }
 
+    int screen = DefaultScreen(dpy);
+
+    fprintf(stderr, "intial screen config: %dx%d %dmmx%dmm\n",
+         XDisplayWidth(dpy, screen), XDisplayHeight(dpy, screen),
+         XDisplayWidthMM(dpy, screen), XDisplayHeightMM(dpy, screen));
+
+    XRRSelectInput(dpy, DefaultRootWindow(dpy), RRScreenChangeNotifyMask);
+    if (sync_resolution(dpy, &mdpy, xrandr_event_base) < 0) {
+        fprintf(stderr, "warning: couldn't sync resolution, using default mode\n");
+    }
+
     //
     // Create necessary buffers
     //
-
-    int screen = DefaultScreen(dpy);
-
-    /* root window buffer */
-    MBuffer root;
+    MBuffer root = { 0 };
     root.width = XDisplayWidth(dpy, screen);
     root.height = XDisplayHeight(dpy, screen);
     if (MCreateBuffer(&mdpy, &root) < 0) {
@@ -422,7 +627,7 @@ int main(void) {
         err = -1;
         goto cleanup_1;
     }
-    printf("[DEBUG] root.__id = %d\n", root.__id);
+    // printf("[DEBUG] root.__id = %d\n", root.__id);
 
     /* cursor buffer */
     XFixesCursorImage *xcursor = XFixesGetCursorImage(dpy);
@@ -437,7 +642,7 @@ int main(void) {
         err = -1;
         goto cleanup_1;
     }
-    printf("[DEBUG] cursor.__id = %d\n", cursor.__id);
+    // printf("[DEBUG] cursor.__id = %d\n", cursor.__id);
 
     /* render cursor sprite */
     if (copy_xcursor_to_buffer(&mdpy, &cursor, xcursor) < 0) {
@@ -500,9 +705,9 @@ int main(void) {
             /* TODO opt: only render damaged areas */
             render_root(dpy, &mdpy, &root, ximg);
         } else if (ev.type == xfixes_event_base + XFixesCursorNotify) {
-            fprintf(stderr, "[DEBUG] XFixesCursorNotifyEvent!\n");
+            // fprintf(stderr, "[DEBUG] XFixesCursorNotifyEvent!\n");
             XFixesCursorNotifyEvent *cev = (XFixesCursorNotifyEvent *)&ev;
-            fprintf(stderr, "[DEBUG] cursor_serial: %lu\n", cev->cursor_serial);
+            // fprintf(stderr, "[DEBUG] cursor_serial: %lu\n", cev->cursor_serial);
 
             /* first, check if we have the new cursor in our cache... */
             XFixesCursorImage *xcursor = cursor_cache_get(cev->cursor_serial);
@@ -519,6 +724,24 @@ int main(void) {
             }
 
             cursor_cache_set_cur(xcursor);
+        } else if (ev.type == xrandr_event_base + RRScreenChangeNotify) {
+            /*
+             * xfsettingsd applies xrandr config on startup based
+             * on the last setting selected in Settings > Display.
+             */
+            XRRScreenChangeNotifyEvent *rev = (XRRScreenChangeNotifyEvent *)&ev;
+            fprintf(stderr, "warning: [t=%lu] screen size changed to %dx%d %dmmx%dmm in main evloop\n",
+                rev->timestamp,
+                rev->width, rev->height,
+                rev->mwidth, rev->mheight);
+
+            if (XRRUpdateConfiguration(&ev) == 0) {
+                fprintf(stderr, "error updating xrandr configuration\n");
+            }
+
+            if (sync_resolution(dpy, &mdpy, xrandr_event_base) < 0) {
+                fprintf(stderr, "warning: couldn't re-sync resolution\n");
+            }
         }
     } while (1);
 

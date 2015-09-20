@@ -19,6 +19,7 @@
 //
 // Opcodes
 //
+#define M_GET_DISPLAY_INFO          (1 << 4)
 #define M_CREATE_BUFFER             (1 << 5)
 #define M_UPDATE_BUFFER             (1 << 6)
 #define M_LOCK_BUFFER               (1 << 7)
@@ -38,6 +39,17 @@ struct MRequestHeader {
     uint32_t op;
 };
 typedef struct MRequestHeader MRequestHeader;
+
+struct MGetDisplayInfoRequest {
+    // empty
+};
+typedef struct MGetDisplayInfoRequest MGetDisplayInfoRequest;
+
+struct MGetDisplayInfoResponse {
+    uint32_t width;
+    uint32_t height;
+};
+typedef struct MGetDisplayInfoResponse MGetDisplayInfoResponse;
 
 struct MCreateBufferRequest {
     uint32_t width;

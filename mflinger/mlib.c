@@ -122,6 +122,31 @@ int MCloseDisplay(MDisplay *dpy) {
     return 0;
 }
 
+int MGetDisplayInfo(MDisplay *dpy, MDisplayInfo *dpy_info) {
+    struct {
+        MRequestHeader header;
+        MGetDisplayInfoRequest request;
+    } packet;
+    packet.header.op = M_GET_DISPLAY_INFO;
+
+    if (write(dpy->sock_fd, &packet, sizeof(packet)) < 0) {
+        fprintf(stderr, "error sending get display info request: %s\n",
+            strerror(errno));
+        return -1;
+    }
+
+    MGetDisplayInfoResponse response;
+    if (read(dpy->sock_fd, &response, sizeof(response)) < 0) {
+        fprintf(stderr, "error receiving get display info response: %s\n",
+            strerror(errno));
+        return -1;
+    }
+
+    dpy_info->width = response.width;
+    dpy_info->height = response.height;
+    return 0;
+}
+
 int MCreateBuffer(MDisplay *dpy, MBuffer *buf) {
     struct {
         MRequestHeader header;

@@ -6,6 +6,12 @@ struct MDisplay {
 };
 typedef struct MDisplay MDisplay;
 
+struct MDisplayInfo {
+    uint32_t width;     /* width in px */
+    uint32_t height;    /* height in px */
+};
+typedef struct MDisplayInfo MDisplayInfo;
+
 struct MBuffer {
     uint32_t width;     /* width in px */
     uint32_t height;    /* height in px */
@@ -19,6 +25,8 @@ typedef struct MBuffer MBuffer;
 
 int     MOpenDisplay    (MDisplay *dpy);
 int     MCloseDisplay   (MDisplay *dpy);
+
+int     MGetDisplayInfo (MDisplay *dpy, MDisplayInfo *dpy_info);
 
 //
 // Buffer management
