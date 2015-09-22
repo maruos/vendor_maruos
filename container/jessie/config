@@ -25,6 +25,10 @@ lxc.kmsg = 0
 lxc.mount.entry = /sys/fs/selinux sys/fs/selinux none bind,ro
 lxc.mount.entry = /dev/input dev/input none bind,ro,create=dir
 
+# mount Android camera photos
+# TODO decide the final mount path
+lxc.mount.entry = /sdcard/DCIM/Camera/ home/pre/Camera none bind,ro,create=dir
+
 # tty7 for X11
 lxc.cgroup.devices.allow = c 4:7 rwm
 # fb0
