@@ -25,9 +25,11 @@ lxc.kmsg = 0
 lxc.mount.entry = /sys/fs/selinux sys/fs/selinux none bind,ro
 lxc.mount.entry = /dev/input dev/input none bind,ro,create=dir
 
-# mount Android camera photos
-# TODO decide the final mount path
-lxc.mount.entry = /sdcard/DCIM/Camera/ home/pre/Camera none bind,ro,create=dir
+# Android mounts
+lxc.mount.entry = /sdcard/DCIM/Camera/ home/maru/Phone/Camera none bind,ro,create=dir
+lxc.mount.entry = /sdcard/Download home/maru/Phone/Download none bind,rw,create=dir
+lxc.mount.entry = /sdcard/Movies home/maru/Phone/Movies none bind,rw,create=dir
+lxc.mount.entry = /sdcard/Music home/maru/Phone/Music none bind,rw,create=dir
 
 # tty7 for X11
 lxc.cgroup.devices.allow = c 4:7 rwm
