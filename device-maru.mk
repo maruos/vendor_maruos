@@ -36,3 +36,13 @@ PRODUCT_COPY_FILES += \
 
 DEVICE_PACKAGE_OVERLAYS := \
     device/lge/hammerhead/maru/overlay/location
+
+# PerspectiveService
+PRODUCT_PACKAGES += \
+    libperspective \
+    perspectived
+
+# mflinger
+PRODUCT_PACKAGES += \
+    libmaru \
+    mflinger
