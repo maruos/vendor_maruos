@@ -36,13 +36,13 @@ using namespace android;
  * display IDs themselves are the layerstack values.
  *
  * To have a stable layerstack for maru, we have DMS reserve
- * the display ID android.view.Display.MARU_DESKTOP_DISPLAY.
+ * the display ID android.view.Display.DEFAULT_EXTERNAL_DISPLAY.
  *
  * These must match android.view.Display.DEFAULT_DISPLAY and
- * android.view.Display.MARU_DESKTOP_DISPLAY!
+ * android.view.Display.DEFAULT_EXTERNAL_DISPLAY!
  */
 static const int DEFAULT_DISPLAY = 0;
-static const int MARU_DESKTOP_DISPLAY = 1;
+static const int DEFAULT_EXTERNAL_DISPLAY = 1;
 
 /*
  * Currently we only support a single client with
@@ -113,7 +113,7 @@ static int assign_layerstack() {
      * debugging purposes.
      */
     int hasHDMIDisplay = dinfo_ext.w > 0 && dinfo_ext.h > 0;
-    return hasHDMIDisplay ? MARU_DESKTOP_DISPLAY : DEFAULT_DISPLAY;
+    return hasHDMIDisplay ? DEFAULT_EXTERNAL_DISPLAY : DEFAULT_DISPLAY;
 }
 
 static int getDisplayInfo(const int sockfd) {
