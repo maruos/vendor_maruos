@@ -12,9 +12,10 @@ PRODUCT_COPY_FILES += \
 
 # container
 PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/prebuilts/jessie-rootfs.tar.gz:data/maru/containers/jessie/jessie-rootfs.tar.gz \
+    device/lge/hammerhead/maru/prebuilts/jessie-rootfs2.tar.gz:data/maru/containers/jessie/jessie-rootfs.tar.gz \
     device/lge/hammerhead/maru/container/jessie/config:data/maru/containers/jessie/config \
-    device/lge/hammerhead/maru/container/jessie/fstab:data/maru/containers/jessie/fstab
+    device/lge/hammerhead/maru/container/jessie/fstab:data/maru/containers/jessie/fstab \
+    device/lge/hammerhead/maru/container/mcprepare.sh:system/xbin/mcprepare
 
 # utilities
 PRODUCT_COPY_FILES += \
@@ -33,6 +34,9 @@ PRODUCT_COPY_FILES += \
     device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/debian.common.conf:data/maru/lxc/share/lxc/config/debian.common.conf \
     device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/debian.userns.conf:data/maru/lxc/share/lxc/config/debian.userns.conf
 
+# bootanim
+PRODUCT_COPY_FILES += \
+    device/lge/hammerhead/maru/prebuilts/mbootanim.zip:system/media/bootanimation.zip
 
 DEVICE_PACKAGE_OVERLAYS := \
     device/lge/hammerhead/maru/overlay/location

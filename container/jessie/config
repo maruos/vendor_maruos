@@ -23,19 +23,12 @@ lxc.kmsg = 0
 
 # HACK to disable SELinux
 lxc.mount.entry = /sys/fs/selinux sys/fs/selinux none bind,ro
+
+# keyboard, mouse
 lxc.mount.entry = /dev/input dev/input none bind,ro,create=dir
 
 # Android mounts
-lxc.mount.entry = /sdcard/DCIM/Camera/ home/maru/Phone/Camera none bind,ro,create=dir
-lxc.mount.entry = /sdcard/Download home/maru/Phone/Download none bind,rw,create=dir
-lxc.mount.entry = /sdcard/Movies home/maru/Phone/Movies none bind,rw,create=dir
-lxc.mount.entry = /sdcard/Music home/maru/Phone/Music none bind,rw,create=dir
-
-# tty7 for X11
-lxc.cgroup.devices.allow = c 4:7 rwm
-# fb0
-lxc.cgroup.devices.allow = c 29:0 rwm
-# fb1
-lxc.cgroup.devices.allow = c 29:1 rwm
-
-lxc.hook.start = /etc/lxc/lxc-hook-start.sh
+lxc.mount.entry = /sdcard/DCIM home/maru/Phone/DCIM none bind,optional,rw,create=dir
+lxc.mount.entry = /sdcard/Download home/maru/Phone/Download none bind,optional,rw,create=dir
+lxc.mount.entry = /sdcard/Movies home/maru/Phone/Movies none bind,optional,rw,create=dir
+lxc.mount.entry = /sdcard/Music home/maru/Phone/Music none bind,optional,rw,create=dir

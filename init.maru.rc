@@ -33,3 +33,7 @@ service mflinger /system/bin/mflinger
 service perspectived /system/bin/perspectived
     class main
     oneshot
+
+service mcprepare /system/bin/logwrapper /system/xbin/mcprepare
+    class late_start
+    oneshot
