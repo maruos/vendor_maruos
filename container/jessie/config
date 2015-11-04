@@ -28,7 +28,7 @@ lxc.mount.entry = /sys/fs/selinux sys/fs/selinux none bind,ro
 lxc.mount.entry = /dev/input dev/input none bind,ro,create=dir
 
 # Android mounts
-lxc.mount.entry = /sdcard/DCIM home/maru/Phone/DCIM none bind,optional,rw,create=dir
-lxc.mount.entry = /sdcard/Download home/maru/Phone/Download none bind,optional,rw,create=dir
-lxc.mount.entry = /sdcard/Movies home/maru/Phone/Movies none bind,optional,rw,create=dir
-lxc.mount.entry = /sdcard/Music home/maru/Phone/Music none bind,optional,rw,create=dir
+lxc.mount.entry = /sdcard/DCIM mnt/Phone/DCIM none bind,optional,rw,create=dir
+lxc.mount.entry = /sdcard/Download mnt/Phone/Download none bind,optional,rw,create=dir
+lxc.mount.entry = /sdcard/Music mnt/Phone/Music none bind,optional,rw,create=dir
+lxc.mount.entry = /sdcard/Movies mnt/Phone/Movies none bind,optional,rw,create=dir

@@ -12,7 +12,7 @@ PRODUCT_COPY_FILES += \
 
 # container
 PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/prebuilts/jessie-rootfs2.tar.gz:data/maru/containers/jessie/jessie-rootfs.tar.gz \
+    device/lge/hammerhead/maru/prebuilts/jessie.tar.gz:data/maru/containers/jessie/jessie-rootfs.tar.gz \
     device/lge/hammerhead/maru/container/jessie/config:data/maru/containers/jessie/config \
     device/lge/hammerhead/maru/container/jessie/fstab:data/maru/containers/jessie/fstab \
     device/lge/hammerhead/maru/container/mcprepare.sh:system/xbin/mcprepare
