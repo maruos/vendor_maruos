@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2015 Preetam D'Souza
+ *
+ */
+
 #ifndef MARU_PERSPECTIVE_SERVICE_H
 #define MARU_PERSPECTIVE_SERVICE_H
 
@@ -32,9 +37,6 @@ private:
     // ------------------------------------------------------------
 
     bool startContainer(struct lxc_container *c);
-
-    bool isUeventFieldMatch(const char *s, const char *match, const int s_len);
-    void ueventPoll();
 
     struct lxc_container *mContainer;
 
