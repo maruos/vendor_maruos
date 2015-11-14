@@ -39,7 +39,8 @@ PRODUCT_COPY_FILES += \
     device/lge/hammerhead/maru/prebuilts/mbootanim.zip:system/media/bootanimation.zip
 
 DEVICE_PACKAGE_OVERLAYS := \
-    device/lge/hammerhead/maru/overlay/location
+    device/lge/hammerhead/maru/overlay/location \
+    device/lge/hammerhead/maru/overlay/apps
 
 # PerspectiveService
 PRODUCT_PACKAGES += \
