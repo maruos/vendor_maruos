@@ -62,7 +62,7 @@
     <!-- Far-right screen [4] -->
 
     <!-- Hotseat (We use the screen as the position of the item in the hotseat) -->
-    <!-- Dialer, Contacts, [All Apps], Messaging, Browser -->
+    <!-- Dialer, Camera, [All Apps], Messaging, Browser -->
     <resolve
         launcher:container="-101"
         launcher:screen="0"
