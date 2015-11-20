@@ -40,7 +40,8 @@ PRODUCT_COPY_FILES += \
 
 DEVICE_PACKAGE_OVERLAYS := \
     device/lge/hammerhead/maru/overlay/location \
-    device/lge/hammerhead/maru/overlay/apps
+    device/lge/hammerhead/maru/overlay/apps \
+    device/lge/hammerhead/maru/overlay/daydream
 
 # PerspectiveService
 PRODUCT_PACKAGES += \
