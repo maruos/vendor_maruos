@@ -2,10 +2,6 @@
 PRODUCT_COPY_FILES += \
     device/lge/hammerhead/maru/init.maru.rc:root/init.maru.rc
 
-# core
-PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/perspective/mcontainer-start.sh:system/xbin/mcontainer-start.sh
-
 # input
 PRODUCT_COPY_FILES += \
     device/lge/hammerhead/maru/excluded-input-devices.xml:system/etc/excluded-input-devices.xml
@@ -15,24 +11,25 @@ PRODUCT_COPY_FILES += \
     device/lge/hammerhead/maru/prebuilts/jessie.tar.gz:data/maru/containers/jessie/jessie-rootfs.tar.gz \
     device/lge/hammerhead/maru/container/jessie/config:data/maru/containers/jessie/config \
     device/lge/hammerhead/maru/container/jessie/fstab:data/maru/containers/jessie/fstab \
-    device/lge/hammerhead/maru/container/mcprepare.sh:system/xbin/mcprepare
-
-# utilities
-PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/prebuilts/busybox:system/xbin/busybox
+    device/lge/hammerhead/maru/container/mcprepare.sh:system/bin/mcprepare
 
 # LXC
 PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/prebuilts/lxc/bin/lxc-start:system/xbin/lxc-start \
-    device/lge/hammerhead/maru/prebuilts/lxc/bin/lxc-stop:system/xbin/lxc-stop \
-    device/lge/hammerhead/maru/prebuilts/lxc/bin/lxc-info:system/xbin/lxc-info \
-    device/lge/hammerhead/maru/prebuilts/lxc/bin/lxc-console:system/xbin/lxc-console \
-    device/lge/hammerhead/maru/prebuilts/lxc/lib/liblxc.so.1.0.7:system/lib/liblxc.so.1 \
     device/lge/hammerhead/maru/prebuilts/lxc/lib/lxc/rootfs/README:data/maru/lxc/lib/lxc/rootfs/README \
     device/lge/hammerhead/maru/prebuilts/lxc/libexec/lxc/lxc-monitord:data/maru/lxc/libexec/lxc/lxc-monitord \
     device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/common.seccomp:data/maru/lxc/share/lxc/config/common.seccomp \
     device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/debian.common.conf:data/maru/lxc/share/lxc/config/debian.common.conf \
     device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/debian.userns.conf:data/maru/lxc/share/lxc/config/debian.userns.conf
+
+PRODUCT_PACKAGES += liblxc
+
+ifeq ($(TARGET_BUILD_VARIANT),userdebug)
+    PRODUCT_PACKAGES += \
+        lxc-start \
+        lxc-stop \
+        lxc-info \
+        lxc-console
+endif
 
 # bootanim
 PRODUCT_COPY_FILES += \
@@ -52,3 +49,6 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     libmaru \
     mflinger
+
+# busybox
+PRODUCT_PACKAGES += busybox

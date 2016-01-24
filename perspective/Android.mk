@@ -16,7 +16,7 @@ LOCAL_SHARED_LIBRARIES := \
     libbinder \
     libutils \
     libperspective \
-    liblxc
+    liblxc-1
 
 include $(BUILD_EXECUTABLE)
 

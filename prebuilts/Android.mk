@@ -1,9 +1,3 @@
 LOCAL_PATH := $(call my-dir)
 
-include $(CLEAR_VARS)
-LOCAL_MODULE := liblxc
-LOCAL_SRC_FILES := lxc/lib/liblxc.so.1.0.7
-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_SUFFIX := .so
-include $(BUILD_PREBUILT)
+include $(call all-makefiles-under, $(LOCAL_PATH))
