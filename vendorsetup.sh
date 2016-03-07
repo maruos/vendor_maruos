@@ -1,0 +1,2 @@
+add_lunch_combo maru_hammerhead-userdebug
+add_lunch_combo maru_hammerhead-user
