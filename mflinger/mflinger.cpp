@@ -23,7 +23,7 @@
 #include "mlib.h"
 #include "mlib-protocol.h"
 
-#define DEBUG (1)
+#define DEBUG (0)
 
 using namespace android;
 
