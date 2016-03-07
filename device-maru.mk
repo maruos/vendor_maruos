@@ -1,25 +1,25 @@
 # init
 PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/init.maru.rc:root/init.maru.rc
+    vendor/maru/init.maru.rc:root/init.maru.rc
 
 # input
 PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/excluded-input-devices.xml:system/etc/excluded-input-devices.xml
+    vendor/maru/excluded-input-devices.xml:system/etc/excluded-input-devices.xml
 
 # container
 PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/prebuilts/jessie.tar.gz:data/maru/containers/jessie/jessie-rootfs.tar.gz \
-    device/lge/hammerhead/maru/container/jessie/config:data/maru/containers/jessie/config \
-    device/lge/hammerhead/maru/container/jessie/fstab:data/maru/containers/jessie/fstab \
-    device/lge/hammerhead/maru/container/mcprepare.sh:system/bin/mcprepare
+    vendor/maru/prebuilts/jessie-min.tar.gz:system/maru/containers/jessie/jessie-rootfs.tar.gz \
+    vendor/maru/container/jessie/config:system/maru/containers/jessie/config \
+    vendor/maru/container/jessie/fstab:system/maru/containers/jessie/fstab \
+    vendor/maru/container/mcprepare.sh:system/bin/mcprepare
 
 # LXC
 PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/prebuilts/lxc/lib/lxc/rootfs/README:data/maru/lxc/lib/lxc/rootfs/README \
-    device/lge/hammerhead/maru/prebuilts/lxc/libexec/lxc/lxc-monitord:data/maru/lxc/libexec/lxc/lxc-monitord \
-    device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/common.seccomp:data/maru/lxc/share/lxc/config/common.seccomp \
-    device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/debian.common.conf:data/maru/lxc/share/lxc/config/debian.common.conf \
-    device/lge/hammerhead/maru/prebuilts/lxc/share/lxc/config/debian.userns.conf:data/maru/lxc/share/lxc/config/debian.userns.conf
+    vendor/maru/prebuilts/lxc/lib/lxc/rootfs/README:system/maru/lxc/lib/lxc/rootfs/README \
+    vendor/maru/prebuilts/lxc/libexec/lxc/lxc-monitord:system/maru/lxc/libexec/lxc/lxc-monitord \
+    vendor/maru/prebuilts/lxc/share/lxc/config/common.seccomp:system/maru/lxc/share/lxc/config/common.seccomp \
+    vendor/maru/prebuilts/lxc/share/lxc/config/debian.common.conf:system/maru/lxc/share/lxc/config/debian.common.conf \
+    vendor/maru/prebuilts/lxc/share/lxc/config/debian.userns.conf:system/maru/lxc/share/lxc/config/debian.userns.conf
 
 PRODUCT_PACKAGES += liblxc
 
@@ -33,12 +33,7 @@ endif
 
 # bootanim
 PRODUCT_COPY_FILES += \
-    device/lge/hammerhead/maru/prebuilts/mbootanim.zip:system/media/bootanimation.zip
-
-DEVICE_PACKAGE_OVERLAYS := \
-    device/lge/hammerhead/maru/overlay/location \
-    device/lge/hammerhead/maru/overlay/apps \
-    device/lge/hammerhead/maru/overlay/daydream
+    vendor/maru/prebuilts/mbootanim.zip:system/media/bootanimation.zip
 
 # PerspectiveService
 PRODUCT_PACKAGES += \
@@ -52,3 +47,6 @@ PRODUCT_PACKAGES += \
 
 # busybox
 PRODUCT_PACKAGES += busybox
+
+# only defined for hammerhead
+PRODUCT_PACKAGES += TimeService
