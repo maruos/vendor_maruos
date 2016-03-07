@@ -1,0 +1,16 @@
+# maru container init process
+type maru_init, domain;
+type maru_init_exec, exec_type, file_type;
+
+permissive maru_init;
+
+# needed to transition role r to non-domain type
+#role r types maru_init;
+
+unconfined_domain(maru_init)
+
+# perspectived auto transitions to maru_init scontext
+domain_auto_trans(perspectived, maru_init_exec, maru_init)
+
+# run lxc-start (TODO make more restrictive)
+allow maru_init system_file:file execute_no_trans;

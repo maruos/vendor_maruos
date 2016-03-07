@@ -1,0 +1,9 @@
+/system/bin/mflinger               u:object_r:mflinger_exec:s0
+/system/bin/perspectived           u:object_r:perspectived_exec:s0
+/system/bin/mcprepare              u:object_r:mcprepare_exec:s0
+/system/bin/busybox                u:object_r:busybox_exec:s0
+
+/data/maru(/.*)?                   u:object_r:maru_file:s0
+/cache/lxc(/.*)?                   u:object_r:maru_file:s0
+
+# MARU_FILE_CONTEXTS

@@ -1,0 +1,9 @@
+# mflinger oneshot service
+# most of this from external/sepolicy/bootanim.te
+type mflinger, domain;
+type mflinger_exec, exec_type, file_type;
+
+init_daemon_domain(mflinger)
+
+binder_use(mflinger)
+binder_call(mflinger, surfaceflinger)

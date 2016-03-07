@@ -1,0 +1,49 @@
+# perspectived daemon
+type perspectived, domain;
+type perspectived_exec, exec_type, file_type;
+
+# TODO log audits and make restrictive
+permissive perspectived;
+
+# silence audits for now
+dontaudit perspectived self:capability_class_set *;
+dontaudit perspectived self:shm *;
+dontaudit perspectived {self mflinger}:socket_class_set *;
+dontaudit perspectived domain:fd *;
+dontaudit perspectived fs_type:filesystem *;
+dontaudit perspectived {fs_type dev_type file_type}:dir_file_class_set *;
+dontaudit perspectived port_type:{ tcp_socket dccp_socket } *;
+
+# started by init
+init_daemon_domain(perspectived)
+
+# Binder IPC
+binder_use(perspectived)
+#binder_call(perspectived, binderservicedomain)
+binder_call(perspectived, appdomain)
+binder_service(perspectived)
+
+# register Binder service
+allow perspectived mperspective_service:service_manager add;
+
+# uevent socket access
+allow perspectived self:netlink_kobject_uevent_socket { create setopt bind read };
+allow perspectived self:capability net_admin;
+
+# proc, cgroups
+allow perspectived init:file r_file_perms;
+allow perspectived init:dir w_dir_perms;
+
+# execute scripts (TODO make this specific script file)
+allow perspectived shell_exec:file rx_file_perms;
+
+allow perspectived maru_file:dir rw_dir_perms;
+allow perspectived maru_file:file create_file_perms;
+allow perspectived maru_file:lnk_file r_file_perms;
+
+# TODO update cache label to maru_file
+allow perspectived cache_file:file create_file_perms;
+allow perspectived cache_file:dir create_dir_perms;
+
+allow perspectived tmpfs:file create_file_perms;
+allow perspectived tmpfs:dir create_dir_perms;

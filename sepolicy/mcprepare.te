@@ -1,0 +1,31 @@
+# mcprepare container utility
+type mcprepare, domain;
+type mcprepare_exec, exec_type, file_type;
+
+# started by init
+init_daemon_domain(mcprepare)
+
+# #!/system/bin/sh
+allow mcprepare shell_exec:file r_file_perms;
+
+# exec busybox, keeping scontext
+allow mcprepare busybox_exec:file execute_no_trans;
+allow mcprepare busybox_exec:file rx_file_perms;
+
+# busybox needs to exec writable memory for some reason...
+allow mcprepare self:process execmem;
+
+# TODO why is this needed?
+allow mcprepare devpts:chr_file rw_file_perms;
+
+# extracting requires create perms, but
+# only for maru_file scontext
+allow mcprepare maru_file:dir create_dir_perms;
+allow mcprepare maru_file:file create_file_perms;
+allow mcprepare maru_file:lnk_file create_file_perms;
+allow mcprepare maru_file:devfile_class_set create_file_perms;
+
+allow mcprepare self:capability { dac_override chown fsetid fowner };
+
+# mknod is in a neverallow so we let mknods fail in the extraction (harmless)
+dontaudit mcprepare self:capability mknod;
