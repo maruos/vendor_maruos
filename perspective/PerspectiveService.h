@@ -21,8 +21,6 @@ public:
 
     PerspectiveService();
 
-    int run();
-
 private:
     // we are reference counted
     ~PerspectiveService();
@@ -36,6 +34,7 @@ private:
 
     // ------------------------------------------------------------
 
+    bool initContainer();
     bool startContainer(struct lxc_container *c);
 
     struct lxc_container *mContainer;
