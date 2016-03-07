@@ -23,6 +23,12 @@ on init
     mkdir /sys/fs/cgroup/freezer 0750 root system
     mount cgroup none /sys/fs/cgroup/freezer freezer
 
+on post-fs-data
+
+    # need to do this in init to get the
+    # maru_file contexts right
+    mkdir /data/maru 0770 system system
+
 
 service mflinger /system/bin/mflinger
     class main
