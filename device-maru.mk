@@ -1,3 +1,6 @@
+# early build definitions for maru
+include $(LOCAL_PATH)/maru_build.mk
+
 # init
 PRODUCT_COPY_FILES += \
     vendor/maru/init.maru.rc:root/init.maru.rc
@@ -50,3 +53,7 @@ PRODUCT_PACKAGES += busybox
 
 # only defined for hammerhead
 PRODUCT_PACKAGES += TimeService
+
+
+PRODUCT_PROPERTY_OVERRIDES += \
+    ro.build.maru.version=$(MARU_BUILD_VERSION)
