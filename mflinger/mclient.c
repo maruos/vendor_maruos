@@ -311,9 +311,6 @@ int cleanup_shm(const void *shmaddr, const int shmid) {
 
 XImage *init_xshm(Display *dpy, XShmSegmentInfo *shminfo, int screen) {
     /* create shared memory XImage structure */
-    printf("creating %dx%d XShm\n",
-        XDisplayWidth(dpy, screen),
-        XDisplayHeight(dpy, screen));
     XImage *ximg = XShmCreateImage(dpy,
                     DefaultVisual(dpy, screen),
                     DefaultDepth(dpy, screen),
@@ -372,7 +369,7 @@ static XRRModeInfo *x_find_matching_mode(Display *dpy,
     int i;
     for (i = 0; i < screenr->nmode; ++i) {
         XRRModeInfo mode = screenr->modes[i];
-        printf("found supported mode: %dx%d\n", mode.width, mode.height);
+        fprintf(stderr, "found supported mode: %dx%d\n", mode.width, mode.height);
         if (mode.width == width && mode.height == height) {
             return &screenr->modes[i];
         }
@@ -623,7 +620,7 @@ int main(void) {
     root.width = XDisplayWidth(dpy, screen);
     root.height = XDisplayHeight(dpy, screen);
     if (MCreateBuffer(&mdpy, &root) < 0) {
-        printf("Error creating root buffer\n");
+        fprintf(stderr, "Error creating root buffer\n");
         err = -1;
         goto cleanup_1;
     }
@@ -638,7 +635,7 @@ int main(void) {
     cursor.width = CURSOR_WIDTH;
     cursor.height = CURSOR_HEIGHT;
     if (MCreateBuffer(&mdpy, &cursor) < 0) {
-        printf("Error creating cursor buffer\n");
+        fprintf(stderr, "Error creating cursor buffer\n");
         err = -1;
         goto cleanup_1;
     }

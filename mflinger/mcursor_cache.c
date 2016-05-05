@@ -54,17 +54,12 @@ XFixesCursorImage *cursor_cache_get(unsigned long serial) {
     int i;
     for (i = 0; i < CURSOR_CACHE_SIZE; ++i) {
         struct cursor_cache_entry *entry = &cursor_cache[i];
-        if (entry->xcursor != NULL) {
-            fprintf(stderr, "[DEBUG] cursor_cache[%d].id = %lu\n",
-                i, entry->xcursor->cursor_serial);
-        }
         if (entry->xcursor != NULL &&
                 entry->xcursor->cursor_serial == serial) {
             return entry->xcursor;
         }
     }
 
-    fprintf(stderr, "[DEBUG] woops, didn't find that id!\n");
     return NULL;
 }
 
