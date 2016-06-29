@@ -17,22 +17,7 @@ PRODUCT_COPY_FILES += \
     vendor/maru/container/mcprepare.sh:system/bin/mcprepare
 
 # LXC
-PRODUCT_COPY_FILES += \
-    vendor/maru/prebuilts/lxc/lib/lxc/rootfs/README:system/maru/lxc/lib/lxc/rootfs/README \
-    vendor/maru/prebuilts/lxc/libexec/lxc/lxc-monitord:system/maru/lxc/libexec/lxc/lxc-monitord \
-    vendor/maru/prebuilts/lxc/share/lxc/config/common.seccomp:system/maru/lxc/share/lxc/config/common.seccomp \
-    vendor/maru/prebuilts/lxc/share/lxc/config/debian.common.conf:system/maru/lxc/share/lxc/config/debian.common.conf \
-    vendor/maru/prebuilts/lxc/share/lxc/config/debian.userns.conf:system/maru/lxc/share/lxc/config/debian.userns.conf
-
 PRODUCT_PACKAGES += liblxc
-
-ifeq ($(TARGET_BUILD_VARIANT),userdebug)
-    PRODUCT_PACKAGES += \
-        lxc-start \
-        lxc-stop \
-        lxc-info \
-        lxc-console
-endif
 
 # bootanim
 PRODUCT_COPY_FILES += \
