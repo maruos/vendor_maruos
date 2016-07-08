@@ -41,5 +41,5 @@ service perspectived /system/bin/perspectived
     oneshot
 
 service mcprepare /system/bin/logwrapper /system/bin/mcprepare
-    class late_start
+    class main
     oneshot
