@@ -11,7 +11,7 @@ PRODUCT_COPY_FILES += \
 
 # container
 PRODUCT_COPY_FILES += \
-    vendor/maru/prebuilts/jessie-min.tar.gz:system/maru/containers/jessie/jessie-rootfs.tar.gz \
+    vendor/maru/prebuilts/desktop-rootfs.tar.gz:system/maru/containers/jessie/jessie-rootfs.tar.gz \
     vendor/maru/container/jessie/config:system/maru/containers/jessie/config \
     vendor/maru/container/jessie/fstab:system/maru/containers/jessie/fstab \
     vendor/maru/container/mcprepare.sh:system/bin/mcprepare
