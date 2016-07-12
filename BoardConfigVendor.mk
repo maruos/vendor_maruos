@@ -1,5 +1,5 @@
 BOARD_SEPOLICY_DIRS += \
-       vendor/maru/sepolicy
+       vendor/maruos/sepolicy
 
 BOARD_SEPOLICY_UNION += \
        service.te \
