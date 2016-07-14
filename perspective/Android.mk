@@ -16,6 +16,9 @@
 #
 LOCAL_PATH := $(call my-dir)
 
+# -----------------------------------------------------------------------------
+# perspectived
+
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := perspectived
@@ -38,4 +41,20 @@ LOCAL_SHARED_LIBRARIES := \
 
 include $(BUILD_EXECUTABLE)
 
-include $(call all-makefiles-under, $(LOCAL_PATH))
+# -----------------------------------------------------------------------------
+# libperspective
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := libperspective
+
+LOCAL_SRC_FILES := lib/IPerspectiveService.cpp
+
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+
+LOCAL_SHARED_LIBRARIES := \
+    liblog \
+    libbinder \
+    libutils
+
+include $(BUILD_SHARED_LIBRARY)
