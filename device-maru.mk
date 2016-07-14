@@ -36,9 +36,5 @@ PRODUCT_PACKAGES += \
 # busybox
 PRODUCT_PACKAGES += busybox
 
-# only defined for hammerhead
-PRODUCT_PACKAGES += TimeService
-
-
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.build.maru.version=$(MARU_BUILD_VERSION)
