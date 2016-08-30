@@ -26,6 +26,9 @@ binder_service(perspectived)
 # register Binder service
 allow perspectived mperspective_service:service_manager add;
 
+# allow system_server to find perspectived
+allow system_server mperspective_service:service_manager find;
+
 # uevent socket access
 allow perspectived self:netlink_kobject_uevent_socket { create setopt bind read };
 allow perspectived self:capability net_admin;

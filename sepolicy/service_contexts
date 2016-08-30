@@ -1,5 +1,9 @@
+# SELinux labels (contexts) for maru binder services registered with servicemanager
+# Each label is of the form user:role:type:mls_level
+# Each line is of the form <service registered name> <label>
+
 # register mperspective as a service
 PerspectiveService                              u:object_r:mperspective_service:s0
 
 # system_server perspective service
-perspective                                     u:object_r:system_server_service:s0
+perspective                                     u:object_r:perspective_service:s0
