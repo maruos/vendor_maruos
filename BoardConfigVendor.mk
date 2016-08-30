@@ -23,7 +23,6 @@ BOARD_SEPOLICY_UNION += \
        perspectived.te \
        mflinger.te \
        mcprepare.te \
-       maru_init.te \
        maru_files.te \
        file_contexts \
        service_contexts
