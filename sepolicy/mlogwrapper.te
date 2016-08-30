@@ -1,0 +1,16 @@
+# mlogwrapper
+type mlogwrapper, domain;
+type mlogwrapper_exec, exec_type, file_type;
+
+# started by init
+init_daemon_domain(mlogwrapper)
+
+# exec sh (needed by mcprepare script)
+allow mlogwrapper shell_exec:file rx_file_perms;
+
+# transition to mcprepare domain
+domain_auto_trans(mlogwrapper, mcprepare_exec, mcprepare)
+
+# write to mlogwrapper's IPC pipe
+allow mcprepare mlogwrapper:fd use;
+allow mcprepare mlogwrapper:fifo_file rw_file_perms;

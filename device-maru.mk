@@ -50,8 +50,9 @@ PRODUCT_PACKAGES += \
     libmaru \
     mflinger
 
-# busybox
-PRODUCT_PACKAGES += busybox
+PRODUCT_PACKAGES += \
+	mlogwrapper \
+	busybox
 
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.build.maru.version=$(MARU_BUILD_VERSION)

@@ -57,6 +57,6 @@ service perspectived /system/bin/perspectived
     class main
     oneshot
 
-service mcprepare /system/bin/logwrapper /system/bin/mcprepare
+service mcprepare /system/bin/mlogwrapper /system/bin/mcprepare
     class main
     oneshot
