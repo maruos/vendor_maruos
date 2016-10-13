@@ -56,3 +56,9 @@ PRODUCT_PACKAGES += \
 
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.build.maru.version=$(MARU_BUILD_VERSION)
+
+# fix usb debugging auth on user builds
+ifeq ($(TARGET_BUILD_VARIANT),user)
+PRODUCT_PROPERTY_OVERRIDES += \
+    ro.adb.secure=1
+endif
