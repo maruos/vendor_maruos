@@ -34,7 +34,13 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/container/mcprepare.sh:system/bin/mcprepare
 
 # LXC
-PRODUCT_PACKAGES += liblxc
+PRODUCT_PACKAGES += \
+	liblxc \
+	lxc-start \
+	lxc-stop \
+	lxc-rootfs-mnt-README \
+	debian.common.conf \
+	debian.userns.conf
 
 # bootanim
 PRODUCT_COPY_FILES += \
