@@ -48,15 +48,15 @@ on post-fs-data
 
 
 service mflinger /system/bin/mflinger
-    class main
+    class late_start
     user graphics
     group graphics
     oneshot
 
 service perspectived /system/bin/perspectived
-    class main
+    class late_start
     oneshot
 
 service mcprepare /system/bin/mlogwrapper /system/bin/mcprepare
-    class main
+    class late_start
     oneshot
