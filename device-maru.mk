@@ -38,9 +38,7 @@ PRODUCT_PACKAGES += \
 	liblxc \
 	lxc-start \
 	lxc-stop \
-	lxc-rootfs-mnt-README \
-	debian.common.conf \
-	debian.userns.conf
+	lxc-rootfs-mnt-README
 
 # bootanim
 PRODUCT_COPY_FILES += \

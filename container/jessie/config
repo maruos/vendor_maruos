@@ -19,18 +19,66 @@
 # Parameters passed to the template: -r jessie
 # For additional config options, please look at lxc.conf(5)
 
-# share the network namespace with Android
-lxc.network.type = none
+#
+# Common debian configuration from debian.common.conf
+#
 
-lxc.rootfs = /data/maru/containers/jessie/rootfs
+# Default pivot location
+lxc.pivotdir = lxc_putold
 
-# Common configuration
-lxc.include = /data/maru/lxc/share/lxc/config/debian.common.conf
+# Default mount entries
+lxc.mount.entry = proc proc proc nodev,noexec,nosuid 0 0
+lxc.mount.entry = sysfs sys sysfs defaults 0 0
+lxc.mount.entry = /sys/fs/fuse/connections sys/fs/fuse/connections none bind,optional 0 0
+
+# Default console settings
+lxc.tty = 4
+lxc.pts = 1024
+
+# Default cgroup limits
+lxc.cgroup.devices.deny = a
+## Allow any mknod (but not using the node)
+lxc.cgroup.devices.allow = c *:* m
+lxc.cgroup.devices.allow = b *:* m
+## /dev/null and zero
+lxc.cgroup.devices.allow = c 1:3 rwm
+lxc.cgroup.devices.allow = c 1:5 rwm
+## consoles
+lxc.cgroup.devices.allow = c 5:0 rwm
+lxc.cgroup.devices.allow = c 5:1 rwm
+## /dev/{,u}random
+lxc.cgroup.devices.allow = c 1:8 rwm
+lxc.cgroup.devices.allow = c 1:9 rwm
+## /dev/pts/*
+lxc.cgroup.devices.allow = c 5:2 rwm
+lxc.cgroup.devices.allow = c 136:* rwm
+## rtc
+lxc.cgroup.devices.allow = c 254:0 rm
+## fuse
+lxc.cgroup.devices.allow = c 10:229 rwm
+## tun
+lxc.cgroup.devices.allow = c 10:200 rwm
+## full
+lxc.cgroup.devices.allow = c 1:7 rwm
+## hpet
+lxc.cgroup.devices.allow = c 10:228 rwm
+## kvm
+lxc.cgroup.devices.allow = c 10:232 rwm
+## To use loop devices, copy the following line to the container's
+## configuration file (uncommented).
+#lxc.cgroup.devices.allow = b 7:* rwm
+
+#
+# Maru configuration
+#
 
 # Container specific configuration
+lxc.rootfs = /data/maru/containers/jessie/rootfs
 lxc.mount = /data/maru/containers/jessie/fstab
 lxc.utsname = jessie
-lxc.arch = armhf
+
+# share the network namespace with Android
+lxc.network.type = none
 
 # needed for systemd
 lxc.autodev = 1
