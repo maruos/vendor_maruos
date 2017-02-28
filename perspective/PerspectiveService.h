@@ -23,6 +23,8 @@
 #include <perspective/IPerspectiveService.h>
 #include <lxc/lxccontainer.h>
 
+#include "ContainerManager.h"
+
 namespace android {
 
 class PerspectiveService : public BnPerspectiveService {
@@ -46,11 +48,7 @@ private:
 
     // ------------------------------------------------------------
 
-    bool initContainer();
-    bool startContainer(struct lxc_container *c);
-
-    struct lxc_container *mContainer;
-
+    sp<ContainerManager> mContainerManager;
 };
 
 }; // namespace android

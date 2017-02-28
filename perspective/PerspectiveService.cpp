@@ -22,7 +22,7 @@
 #include <binder/IServiceManager.h>
 
 #include "PerspectiveService.h"
-#include <lxc/lxccontainer.h>
+#include "LXCContainerManager.h"
 
 #define DEBUG 1
 
@@ -33,111 +33,32 @@ namespace android {
  */
 static const char *CONTAINER = "jessie";
 
-bool PerspectiveService::initContainer() {
-    if (mContainer != NULL) {
-        lxc_container_put(mContainer);
-        mContainer = NULL;
-    }
-
-    mContainer = lxc_container_new(CONTAINER, NULL);
-    if (mContainer == NULL) {
-        ALOGW("can't initialize desktop container, container is NULL");
-        return false;
-    } else if (!mContainer->is_defined(mContainer)) {
-        ALOGW("can't initialize desktop container, container is undefined");
-
-        // drop reference, try again later
-        lxc_container_put(mContainer);
-        mContainer = NULL;
-
-        return false;
-    }
-
-    return true;
-}
-
-PerspectiveService::PerspectiveService() : mContainer(NULL) {
+PerspectiveService::PerspectiveService() : mContainerManager(NULL) {
     ALOGI("perspectived is starting...");
 
-    initContainer();
+    mContainerManager = new LXCContainerManager();
 }
 
 PerspectiveService::~PerspectiveService() {
-    if (mContainer != NULL) {
-        lxc_container_put(mContainer);
-        mContainer = NULL;
-    }
-}
-
-bool PerspectiveService::startContainer(struct lxc_container *c) {
-    if (!c->start(c, 0, NULL)) {
-        ALOGD_IF(DEBUG, "liblxc returned false for start, possible false positive...");
-        if (!c->is_running(c)) {
-            return false;
-        }
-    }
-
-    return true;
+    mContainerManager = NULL;
 }
 
 bool PerspectiveService::start() {
     ALOGD_IF(DEBUG, "running start()...");
 
-    if (mContainer == NULL || !mContainer->is_defined(mContainer)) {
-        ALOGW("start on uninitialized container detected, trying to init...");
-        if (!initContainer()) {
-            ALOGE("failed to start container, can't init container");
-            return false;
-        }
-    }
-
-    if (!mContainer->is_running(mContainer)) {
-        if (!startContainer(mContainer)) {
-            ALOGE("failed to start desktop");
-            return false;
-        }
-
-        ALOGD_IF(DEBUG, "desktop GO!");
-        ALOGD_IF(DEBUG, "container state: %s", mContainer->state(mContainer));
-        ALOGD_IF(DEBUG, "container PID: %d", mContainer->init_pid(mContainer));
-    } else {
-        ALOGD("desktop already running, ignoring event...");
-    }
-
-    return true;
+    return mContainerManager->start(CONTAINER);
 }
 
 bool PerspectiveService::stop() {
     ALOGD_IF(DEBUG, "running stop()...");
 
-    if (mContainer == NULL || !mContainer->is_defined(mContainer)) {
-        ALOGW("stop on uninitialized container detected, trying to init...");
-        if (!initContainer()) {
-            ALOGE("failed to stop container, can't init container");
-            return false;
-        }
-    }
-
-    if (!mContainer->is_running(mContainer)) {
-        // nothing to do
-        return true;
-    }
-
-    return mContainer->stop(mContainer);
+    return mContainerManager->stop(CONTAINER);
 }
 
 bool PerspectiveService::isRunning() {
     ALOGD_IF(DEBUG, "running isRunning()...");
 
-    if (mContainer == NULL || !mContainer->is_defined(mContainer)) {
-        ALOGW("check state on uninitialized container detected, trying to init...");
-        if (!initContainer()) {
-            ALOGE("failed to check container state, can't init container");
-            return false;
-        }
-    }
-
-    return mContainer->is_running(mContainer);
+    return mContainerManager->isRunning(CONTAINER);
 }
 
 }; // namespace android

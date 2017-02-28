@@ -23,7 +23,9 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := perspectived
 
-LOCAL_SRC_FILES := PerspectiveService.cpp
+LOCAL_SRC_FILES := \
+	PerspectiveService.cpp \
+	LXCContainerManager.cpp
 
 LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/../include \
