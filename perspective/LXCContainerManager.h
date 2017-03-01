@@ -17,8 +17,6 @@
 #ifndef MARU_LXCCONTAINER_MANAGER_H
 #define MARU_LXCCONTAINER_MANAGER_H
 
-#include <lxc/lxccontainer.h>
-
 #include "ContainerManager.h"
 
 namespace android {

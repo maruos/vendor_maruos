@@ -15,6 +15,7 @@
  */
 
 #include <cutils/log.h>
+#include <lxc/lxccontainer.h>
 
 #include "LXCContainerManager.h"
 

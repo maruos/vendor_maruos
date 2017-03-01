@@ -19,9 +19,7 @@
 #define MARU_PERSPECTIVE_SERVICE_H
 
 #include <utils/RefBase.h>
-
 #include <perspective/IPerspectiveService.h>
-#include <lxc/lxccontainer.h>
 
 #include "ContainerManager.h"
 
