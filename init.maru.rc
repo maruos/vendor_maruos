@@ -25,7 +25,7 @@ on init
     # set up devices cgroup
     #
 
-    # init.rc already mounts tmpfs for memory cgroup
+    mount tmpfs none /sys/fs/cgroup mode=0750,uid=0,gid=1000
     mkdir /sys/fs/cgroup/devices 0750 root system
     #chown root system /sys/fs/cgroup/devices
     #chmod 0750 /sys/fs/cgroup/devices
