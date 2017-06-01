@@ -14,4 +14,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-export MARU_BUILD_VERSION=master
+export MARU_BUILD_VERSION=0.4.1
