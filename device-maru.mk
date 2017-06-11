@@ -40,6 +40,9 @@ PRODUCT_PACKAGES += \
 	lxc-stop \
 	lxc-rootfs-mnt-README
 
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/container/lxc.conf:system/maru/lxc/etc/lxc/lxc.conf
+
 # bootanim
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/prebuilts/mbootanim.zip:system/media/bootanimation.zip
