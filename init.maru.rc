@@ -21,7 +21,7 @@
 
 on init
 
-    # 
+    #
     # set up devices cgroup
     #
 
@@ -44,13 +44,19 @@ on post-fs-data
 
     # need to do this in init to get the
     # maru_file contexts right
-    mkdir /data/maru 0770 system system
+    mkdir /data/maru 0755 root system
+    chmod /data/maru 0755
 
 
 service mflinger /system/bin/mflinger
     class late_start
     user graphics
     group graphics
+    oneshot
+
+service maudioflinger /system/bin/maudioflinger /data/maru/maudio
+    class late_start
+    group media
     oneshot
 
 service perspectived /system/bin/perspectived

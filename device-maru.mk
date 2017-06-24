@@ -58,6 +58,9 @@ PRODUCT_PACKAGES += \
     mflinger
 
 PRODUCT_PACKAGES += \
+	maudioflinger
+
+PRODUCT_PACKAGES += \
 	mlogwrapper \
 	busybox
 

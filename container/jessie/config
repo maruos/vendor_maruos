@@ -94,3 +94,6 @@ lxc.mount.entry = /dev/input dev/input none bind,ro,create=dir
 
 # Android mounts
 lxc.mount.entry = /sdcard mnt/sdcard none bind,optional,rw,create=dir
+
+# shared Maru files and container config
+lxc.mount.entry = /data/maru mnt/maru none bind.optional,rw,create=dir

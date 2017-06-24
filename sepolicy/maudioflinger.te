@@ -1,0 +1,14 @@
+# maudioflinger service
+type maudioflinger, domain;
+type maudioflinger_exec, exec_type, file_type;
+
+init_daemon_domain(maudioflinger)
+
+# allow maudioflinger to talk to mediaserver (audioflinger)
+binder_use(maudioflinger)
+binder_call(maudioflinger, mediaserver)
+binder_call(mediaserver, maudioflinger)
+allow maudioflinger mediaserver_service:service_manager find;
+
+allow maudioflinger maru_file:dir create_dir_perms;
+allow maudioflinger maru_file:fifo_file { create_file_perms };
