@@ -14,4 +14,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-export MARU_BUILD_VERSION=nougat-mr2-release
+export MARU_BUILD_VERSION=cm-14.1

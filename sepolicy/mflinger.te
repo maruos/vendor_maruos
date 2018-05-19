@@ -10,3 +10,6 @@ binder_call(mflinger, surfaceflinger)
 
 # allow mflinger to find surfaceflinger
 allow mflinger surfaceflinger_service:service_manager find;
+
+# allow mflinger to read the ion buffer used by mclient
+allow mflinger ion_device:chr_file r_file_perms;

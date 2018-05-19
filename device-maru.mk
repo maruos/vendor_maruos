@@ -40,10 +40,6 @@ PRODUCT_PACKAGES += \
 	lxc-stop \
 	lxc-rootfs-mnt-README
 
-# bootanim
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/prebuilts/mbootanim.zip:system/media/bootanimation.zip
-
 # PerspectiveService
 PRODUCT_PACKAGES += \
     libperspective \
@@ -66,3 +62,10 @@ ifeq ($(TARGET_BUILD_VARIANT),user)
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.adb.secure=1
 endif
+
+# -----------------------------------------------------------------------------
+# Lineage OS hooks
+
+WITHOUT_CHECK_API := true
+
+TARGET_BOOTANIMATION := $(LOCAL_PATH)/prebuilts/mbootanim.zip
