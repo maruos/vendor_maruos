@@ -57,6 +57,15 @@ PRODUCT_PACKAGES += \
 	mlogwrapper \
 	busybox
 
+# Replace LineageOS packages
+PRODUCT_PACKAGES += \
+	LineagePackageRemovals \
+	Launcher3 \
+	Provision
+
+PRODUCT_PACKAGE_OVERLAYS += \
+	vendor/maruos/overlay
+
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.build.maru.version=$(MARU_BUILD_VERSION)
 
