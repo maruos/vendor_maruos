@@ -15,15 +15,11 @@ allow mcprepare busybox_exec:file rx_file_perms;
 # busybox needs to exec writable memory for some reason...
 allow mcprepare self:process execmem;
 
-# TODO why is this needed?
-allow mcprepare devpts:chr_file rw_file_perms;
-
 # extracting requires create perms, but
 # only for maru_file scontext
 allow mcprepare maru_file:dir create_dir_perms;
 allow mcprepare maru_file:file { create_file_perms link };
 allow mcprepare maru_file:lnk_file create_file_perms;
-allow mcprepare maru_file:devfile_class_set create_file_perms;
 
 allow mcprepare self:capability { dac_override chown fsetid fowner };
 
