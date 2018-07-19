@@ -8,6 +8,9 @@ init_daemon_domain(mflinger)
 binder_use(mflinger)
 binder_call(mflinger, surfaceflinger)
 
+binder_call(mflinger, hwservicemanager)
+get_prop(mflinger, hwservicemanager_prop)
+
 # allow mflinger to find surfaceflinger
 allow mflinger surfaceflinger_service:service_manager find;
 
