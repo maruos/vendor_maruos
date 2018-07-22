@@ -14,4 +14,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-export MARU_BUILD_VERSION=cm-14.1
+export MARU_BUILD_VERSION=0.6-$(shell date -u +%Y%m%d)
