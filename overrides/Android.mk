@@ -22,6 +22,11 @@ LOCAL_MODULE_TAGS := optional
 
 # LOCAL_OVERRIDES_PACKAGES does not work with phony packages so we explicitly
 # set this make variable.
-PACKAGES.$(LOCAL_MODULE).OVERRIDES := LineageSetupWizard AudioFX Recorder Trebuchet
+PACKAGES.$(LOCAL_MODULE).OVERRIDES := \
+	LineageSetupWizard \
+	AudioFX \
+	Recorder \
+	Trebuchet \
+	Updater
 
 include $(BUILD_PHONY_PACKAGE)
