@@ -22,10 +22,6 @@ include $(LOCAL_PATH)/maru_build.mk
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/init.maru.rc:root/init.maru.rc
 
-# input
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/excluded-input-devices.xml:system/etc/excluded-input-devices.xml
-
 # container
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/prebuilts/desktop-rootfs.tar.gz:system/maru/containers/jessie/jessie-rootfs.tar.gz \

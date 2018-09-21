@@ -35,6 +35,8 @@ public:
     virtual bool stop() = 0;
 
     virtual bool isRunning() = 0;
+
+    virtual bool enableInput(bool enable) = 0;
 };
 
 /**

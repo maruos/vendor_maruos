@@ -31,6 +31,7 @@ public:
     virtual bool start(const char* id);
     virtual bool stop(const char* id);
     virtual bool isRunning(const char* id);
+    virtual bool enableInput(const char* id, const bool enable);
 
     // ------------------------------------------------------------------------
 
