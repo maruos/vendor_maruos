@@ -15,10 +15,6 @@
 # limitations under the License.
 #
 
-# Template used to create this container: /usr/share/lxc/templates/lxc-debian
-# Parameters passed to the template: -r jessie
-# For additional config options, please look at lxc.conf(5)
-
 #
 # Common debian configuration from debian.common.conf
 #
@@ -73,9 +69,8 @@ lxc.cgroup.devices.allow = c 10:232 rwm
 #
 
 # Container specific configuration
-lxc.rootfs = /data/maru/containers/jessie/rootfs
-lxc.mount = /data/maru/containers/jessie/fstab
-lxc.utsname = jessie
+lxc.rootfs = /data/maru/containers/default/rootfs
+lxc.mount = /data/maru/containers/default/fstab
 
 # share the network namespace with Android
 lxc.network.type = none

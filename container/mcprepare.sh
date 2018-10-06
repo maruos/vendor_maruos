@@ -20,16 +20,16 @@
 MARU_SYSTEM_DIR="/system/maru"
 MARU_DATA_DIR="/data/maru"
 
-SRC_DIR="$MARU_SYSTEM_DIR/containers/jessie"
-DST_DIR="$MARU_DATA_DIR/containers/jessie"
-ROOTFS="$SRC_DIR/jessie-rootfs.tar.gz"
+SRC_DIR="$MARU_SYSTEM_DIR/containers/default"
+DST_DIR="$MARU_DATA_DIR/containers/default"
+ROOTFS="$SRC_DIR/rootfs.tar.gz"
 
 if [ ! -d "$DST_DIR" ] ; then
     echo "copying maru files to /data..."
     busybox cp -r "$MARU_SYSTEM_DIR" "/data/"
 
     # not needed since we read rootfs from /system
-    busybox rm "$DST_DIR/jessie-rootfs.tar.gz"
+    busybox rm "$DST_DIR/rootfs.tar.gz"
 fi
 
 if [ -d "$DST_DIR/rootfs" ] ; then
