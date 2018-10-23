@@ -34,6 +34,7 @@ PRODUCT_PACKAGES += \
 	liblxc \
 	lxc-start \
 	lxc-stop \
+	lxc-attach \
 	lxc-rootfs-mnt-README
 
 PRODUCT_COPY_FILES += \
