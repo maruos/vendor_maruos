@@ -127,6 +127,8 @@ static bool containerEnableInput(const char* id, const bool enable) {
 
     const char *program = enable ? "/etc/maruos/enable-input" : "/etc/maruos/disable-input";
     lxc_attach_options_t attach_options = LXC_ATTACH_OPTIONS_DEFAULT;
+    // Drop pid namespace when running lxc-attach to support old kernels.
+    attach_options.namespaces = CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC;
     // The lxc_attach_command_t.argv in attach_options.h needs including
     // program in argv[0]. And we must use NULL as the end of argv.
     const char *argv[] = {"/bin/bash", "-c", program, NULL};
