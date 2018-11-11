@@ -26,6 +26,7 @@ public:
     virtual bool start(const char* id) = 0;
     virtual bool stop(const char* id) = 0;
     virtual bool isRunning(const char* id) = 0;
+    virtual bool enableInput(const char* id, const bool enable) = 0;
 
 protected:
     // we are reference counted

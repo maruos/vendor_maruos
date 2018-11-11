@@ -61,6 +61,12 @@ bool PerspectiveService::isRunning() {
     return mContainerManager->isRunning(CONTAINER);
 }
 
+bool PerspectiveService::enableInput(bool enable) {
+    ALOGD_IF(DEBUG, "running enableInput(%s)...", (enable ? "true" : "false"));
+
+    return mContainerManager->enableInput(CONTAINER, enable);
+}
+
 }; // namespace android
 
 int main(void) {

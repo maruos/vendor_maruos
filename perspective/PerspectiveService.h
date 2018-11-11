@@ -43,6 +43,7 @@ private:
     virtual bool start();
     virtual bool stop();
     virtual bool isRunning();
+    virtual bool enableInput(bool enable);
 
     // ------------------------------------------------------------
 
