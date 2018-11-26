@@ -1,5 +1,6 @@
 # perspectived daemon
 type perspectived, domain;
+typeattribute perspectived coredomain;
 type perspectived_exec, exec_type, file_type;
 
 # TODO log audits and make restrictive

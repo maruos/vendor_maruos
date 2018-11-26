@@ -1,6 +1,6 @@
 # mflinger oneshot service
 # most of this from external/sepolicy/bootanim.te
-type mflinger, domain;
+type mflinger, domain, coredomain;
 type mflinger_exec, exec_type, file_type;
 
 init_daemon_domain(mflinger)

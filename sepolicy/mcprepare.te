@@ -1,12 +1,12 @@
 # mcprepare container utility
-type mcprepare, domain;
+type mcprepare, domain, coredomain;
 type mcprepare_exec, exec_type, file_type;
 
 # started by init
 init_daemon_domain(mcprepare)
 
 # #!/system/bin/sh
-allow mcprepare shell_exec:file r_file_perms;
+allow mcprepare shell_exec:file rx_file_perms;
 
 # exec busybox, keeping scontext
 allow mcprepare busybox_exec:file execute_no_trans;
