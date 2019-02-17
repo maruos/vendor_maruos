@@ -2,12 +2,11 @@
 
 Hardware-agnostic customizations go here.
 
-### Contributing
+## Contributing
 
 See the [main Maru OS repository](https://github.com/maruos/maruos) for more
 info.
 
-### Licensing
+## License
 
-This repository is licensed under the Apache License, Version 2.0. See
-[LICENSE](LICENSE) for the details.
+[Apache 2.0](LICENSE)
