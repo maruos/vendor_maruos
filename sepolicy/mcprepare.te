@@ -2,6 +2,9 @@
 type mcprepare, domain, coredomain;
 type mcprepare_exec, exec_type, file_type;
 
+# TODO log audits and make restrictive
+permissive mcprepare;
+
 # started by init
 init_daemon_domain(mcprepare)
 
@@ -17,11 +20,12 @@ allow mcprepare self:process execmem;
 
 # extracting requires create perms, but
 # only for maru_file scontext
-allow mcprepare maru_file:dir create_dir_perms;
-allow mcprepare maru_file:file { create_file_perms link };
-allow mcprepare maru_file:lnk_file create_file_perms;
+# allow mcprepare maru_file:dir create_dir_perms;
+# allow mcprepare maru_file:file { create_file_perms link };
+# allow mcprepare maru_file:lnk_file create_file_perms;
 
-allow mcprepare self:capability { dac_override chown fsetid fowner };
+allow mcprepare self:capability { chown fsetid fowner };
+# allow mcprepare self:capability dac_override;
 
 # mknod is in a neverallow so we let mknods fail in the extraction (harmless)
 dontaudit mcprepare self:capability mknod;

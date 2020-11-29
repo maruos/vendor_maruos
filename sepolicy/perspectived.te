@@ -41,9 +41,9 @@ allow perspectived init:dir w_dir_perms;
 # execute scripts (TODO make this specific script file)
 allow perspectived shell_exec:file rx_file_perms;
 
-allow perspectived maru_file:dir rw_dir_perms;
-allow perspectived maru_file:file create_file_perms;
-allow perspectived maru_file:lnk_file r_file_perms;
+# allow perspectived maru_file:dir rw_dir_perms;
+# allow perspectived maru_file:file create_file_perms;
+# allow perspectived maru_file:lnk_file r_file_perms;
 
 # TODO update cache label to maru_file
 allow perspectived cache_file:file create_file_perms;
