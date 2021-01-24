@@ -26,6 +26,7 @@ binder_service(perspectived)
 
 # register Binder service
 allow perspectived mperspective_service:service_manager add;
+allow perspectived default_android_service:service_manager add;
 
 # allow system_server to find perspectived
 allow system_server mperspective_service:service_manager find;
