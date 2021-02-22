@@ -60,6 +60,14 @@ PRODUCT_PACKAGES += \
 	Launcher3 \
 	Provision
 
+# Maru apps
+PRODUCT_PACKAGES += \
+    MaruSettings \
+
+# init
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/privapp-permissions-maru.xml:system/etc/permissions/privapp-permissions-maru.xml
+
 PRODUCT_PACKAGE_OVERLAYS += \
 	vendor/maruos/overlay
 
