@@ -85,4 +85,6 @@ endif
 
 WITHOUT_CHECK_API := true
 
+ifneq ($(MARU_VERSION),)
 TARGET_BOOTANIMATION := $(LOCAL_PATH)/prebuilts/mbootanim.zip
+endif
