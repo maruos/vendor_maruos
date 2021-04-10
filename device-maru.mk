@@ -23,8 +23,8 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/init.maru.rc:root/init.maru.rc
 
 # container
+PRODUCT_PACKAGES += rootfs.tar.gz
 PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/prebuilts/desktop-rootfs.tar.gz:system/maru/containers/default/rootfs.tar.gz \
     $(LOCAL_PATH)/container/default/config:system/maru/containers/default/config \
     $(LOCAL_PATH)/container/default/fstab:system/maru/containers/default/fstab \
     $(LOCAL_PATH)/container/mcprepare.sh:system/bin/mcprepare

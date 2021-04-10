@@ -16,4 +16,26 @@
 #
 LOCAL_PATH := $(call my-dir)
 
+# TARGET_DESKTOP_ROOTFS can be set in vendor makefiles to override the default
+# desktop rootfs image for Maru. Note that the path must be relative to the
+# AOSP workspace root directory, which can easily be done by prefixing the path
+# with $(LOCAL_PATH).
+ifeq ($(TARGET_DESKTOP_ROOTFS),)
+  TARGET_DESKTOP_ROOTFS := $(LOCAL_PATH)/desktop-rootfs.tar.gz
+endif
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := rootfs.tar.gz
+LOCAL_MODULE_TAGS  := optional
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT)/maru/containers/default
+
+# Instead of using LOCAL_SRC_FILES and $(BUILD_PREBUILT), we explicitly set up
+# the rule ourselves so that we can copy a rootfs path from outside of this
+# directory if a vendor overrides TARGET_DESKTOP_ROOTFS.
+include $(BUILD_SYSTEM)/base_rules.mk
+$(LOCAL_BUILT_MODULE): $(TARGET_DESKTOP_ROOTFS)
+	@mkdir -p $(dir $@)
+	@cp $(TARGET_DESKTOP_ROOTFS) $@
+
 include $(call all-makefiles-under, $(LOCAL_PATH))
