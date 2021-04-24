@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 
-# lazy set prebuilt rootfs to maru if empty
-PREBUILT_REPO ?= maruos
-
 # early build definitions for maru
 include $(LOCAL_PATH)/maru_build.mk
 
@@ -26,16 +23,11 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/init.maru.rc:root/init.maru.rc
 
 # container
+PRODUCT_PACKAGES += rootfs.tar.gz
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/container/default/config:system/maru/containers/default/config \
     $(LOCAL_PATH)/container/default/fstab:system/maru/containers/default/fstab \
     $(LOCAL_PATH)/container/mcprepare.sh:system/bin/mcprepare
-
-# prebuilt rootfs
-ifeq ($(PREBUILT_REPO),maruos)
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/prebuilts/desktop-rootfs.tar.gz:system/maru/containers/default/rootfs.tar.gz
-endif
 
 # LXC
 PRODUCT_PACKAGES += \
