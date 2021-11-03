@@ -1,2 +1,2 @@
-allow system_server default_android_hwservice:hwservice_manager find;
-allow system_server default_android_service:service_manager { add find };
+allow system_server default_android_hwservice_maru:hwservice_manager find;
+allow system_server default_android_service_maru:service_manager { add find };

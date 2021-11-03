@@ -1,0 +1,4 @@
+# This is being used as a wrapper around default_android_hwservice and default_android_service
+
+type default_android_hwservice_maru, hwservice_manager_type;
+type default_android_service_maru,   service_manager_type;
